@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QuizCraft Pro — Multi-User Edition</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Open+Dyslexic&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-main: #0b1329;
+            --bg-card: #152243;
+            --bg-card-hover: #1d2d54;
+            --border-color: #233563;
+            --primary-blue: #2563eb;
+            --primary-glow: #3b82f6;
+            --accent-cyan: #06b6d4;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --font-family: 'Plus Jakarta Sans', sans-serif;
+            --radius-lg: 16px;
+            --radius-md: 10px;
+        }
+
+        body.dyslexic-font { --font-family: 'Open Dyslexic', sans-serif; }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: var(--font-family);
+            background: radial-gradient(circle at top center, #1e293b 0%, #0b1329 100%);
+            color: var(--text-main);
+            min-height: 100vh;
+            padding: 24px 16px;
+        }
+
+        .app-container { max-width: 1100px; margin: 0 auto; }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--bg-card);
+            padding: 18px 24px;
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border-color);
+            margin-bottom: 24px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .brand { font-size: 1.5rem; font-weight: 800; color: #38bdf8; display: flex; align-items: center; gap: 8px; }
+        .user-stats { display: flex; gap: 12px; align-items: center; }
+        .stat-badge { background: #0f172a; padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 700; border: 1px solid var(--border-color); }
+
+        .btn {
+            background: linear-gradient(135deg, var(--primary-blue), #1d4ed8);
+            color: white;
+            border: none;
+            padding: 10px 18px;
+            border-radius: var(--radius-md);
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn:hover { background: var(--primary-glow); transform: translateY(-1px); }
+        .btn-secondary { background: var(--bg-card-hover); border: 1px solid var(--border-color); }
+        .btn-secondary:hover { background: #2a3d6e; }
+        .btn-danger { background: var(--danger); }
+
+        .auth-card {
+            max-width: 420px;
+            margin: 60px auto;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 32px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        }
+
+        .dashboard-layout { display: grid; grid-template-columns: 280px 1fr; gap: 24px; }
+
+        .sidebar-card {
+            background: var(--bg-card);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+            border: 1px solid var(--border-color);
+            margin-bottom: 20px;
+        }
+
+        .sidebar-title { font-size: 1rem; font-weight: 700; color: var(--accent-cyan); margin-bottom: 14px; }
+
+        .folder-list { list-style: none; }
+        .folder-item {
+            padding: 10px 14px;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            margin-bottom: 6px;
+            transition: all 0.2s;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .folder-item:hover, .folder-item.active { background: var(--bg-card-hover); color: var(--accent-cyan); }
+
+        .quiz-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 18px; }
+
+        .quiz-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            transition: all 0.2s ease;
+        }
+
+        .quiz-card:hover { transform: translateY(-3px); border-color: var(--primary-glow); }
+
+        .badge {
+            background: #0f172a;
+            color: var(--accent-cyan);
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 20px;
+            width: fit-content;
+        }
+
+        .heatmap-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-top: 10px; }
+        .heatmap-cell {
+            height: 24px;
+            background: #0f172a;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.65rem;
+            color: var(--text-muted);
+        }
+        .heatmap-cell.active { background: var(--accent-cyan); color: #000; font-weight: 700; }
+
+        .hidden { display: none !important; }
+
+        .form-control {
+            width: 100%;
+            background: #0f172a;
+            border: 1px solid var(--border-color);
+            color: white;
+            padding: 10px;
+            border-radius: var(--radius-md);
+            margin-top: 6px;
+            margin-bottom: 14px;
+        }
+
+        .source-box {
+            background: #0f172a;
+            border-left: 4px solid var(--accent-cyan);
+            padding: 14px;
+            border-radius: var(--radius-md);
+            margin-bottom: 16px;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            color: var(--text-muted);
+        }
+
+        .confidence-box {
+            background: #0f172a;
+            padding: 12px;
+            border-radius: var(--radius-md);
+            margin-top: 12px;
+            border: 1px dashed var(--border-color);
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <header>
+        <div class="brand">⚡ QuizCraft Pro</div>
+        <div class="user-stats" id="nav-user-area">
+            <span class="stat-badge" id="user-display-name">👤 Guest</span>
+            <span class="stat-badge" id="user-xp">⚡ 0 XP</span>
+            <span class="stat-badge" id="user-level">🏆 Lv. 1</span>
+            <button class="btn btn-secondary" onclick="toggleDyslexicFont()">Aa Font</button>
+            <button class="btn btn-danger" id="logout-btn" onclick="logoutUser()">Logout</button>
+        </div>
+    </header>
+
+    <!-- AUTHENTICATION SCREEN -->
+    <div id="screen-auth">
+        <div class="auth-card">
+            <h2 id="auth-title" style="margin-bottom: 8px;">Log In</h2>
+            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 20px;">Access your saved quizzes, study history, and XP.</p>
+
+            <label>Username</label>
+            <input type="text" id="auth-username" class="form-control" placeholder="Enter username">
+
+            <label>Password</label>
+            <input type="password" id="auth-password" class="form-control" placeholder="Enter password">
+
+            <div style="display: flex; gap: 10px; margin-top: 10px;">
+                <button class="btn" style="flex:1;" onclick="handleAuthSubmit()">Submit</button>
+            </div>
+
+            <p style="text-align: center; margin-top: 16px; font-size: 0.85rem; color: var(--text-muted);">
+                <span id="auth-toggle-text">Need an account?</span> 
+                <a href="#" style="color: var(--accent-cyan);" onclick="toggleAuthMode()">Switch Form</a>
+            </p>
+        </div>
+    </div>
+
+    <!-- MAIN DASHBOARD -->
+    <div id="screen-dashboard" class="dashboard-layout hidden">
+        <aside>
+            <div class="sidebar-card">
+                <div style="display: flex; justify-content: space-between; align-items: center;" class="sidebar-title">
+                    <span>Subject Folders</span>
+                    <button class="btn btn-secondary" style="padding: 2px 8px; font-size: 0.75rem;" onclick="addFolder()">+</button>
+                </div>
+                <ul class="folder-list" id="folder-list"></ul>
+            </div>
+
+            <div class="sidebar-card">
+                <div class="sidebar-title">📅 7-Day Activity Heatmap</div>
+                <div class="heatmap-grid" id="heatmap-container"></div>
+            </div>
+        </aside>
+
+        <main>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;">
+                <h2 id="folder-header-title">All Quizzes</h2>
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-secondary" onclick="showScreen('screen-json')">📋 Import JSON</button>
+                    <button class="btn" onclick="showScreen('screen-notes')">📝 Notes Uploader</button>
+                </div>
+            </div>
+
+            <div class="quiz-grid" id="quiz-grid"></div>
+        </main>
+    </div>
+
+    <!-- GAMEPLAY / QUIZ SCREEN -->
+    <div id="screen-gameplay" class="hidden">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <span class="badge" id="quiz-badge">History</span>
+            <span id="quiz-adaptive-status" style="color: var(--accent-cyan); font-weight: 700; font-size: 0.85rem;">Mode: Standard</span>
+        </div>
+
+        <h3 id="quiz-question-text" style="margin-bottom: 18px;">Question text</h3>
+
+        <div id="quiz-options-container" style="display: flex; flex-direction: column; gap: 10px;"></div>
+
+        <div id="confidence-step" class="confidence-box hidden">
+            <p style="font-size: 0.85rem; margin-bottom: 8px; color: var(--accent-cyan);">How confident are you in this answer?</p>
+            <div style="display: flex; gap: 8px;">
+                <button class="btn btn-secondary" style="flex:1;" onclick="setConfidence('Guess')">🤔 Guess</button>
+                <button class="btn btn-secondary" style="flex:1;" onclick="setConfidence('Unsure')">😐 Unsure</button>
+                <button class="btn btn-secondary" style="flex:1;" onclick="setConfidence('Certain')">🎯 Certain</button>
+            </div>
+        </div>
+
+        <div id="quiz-feedback" class="source-box hidden" style="margin-top: 16px; border-color: var(--success);"></div>
+
+        <div style="text-align: right; margin-top: 20px;">
+            <button class="btn" id="quiz-next-btn" style="display:none;" onclick="nextQuizQuestion()">Next Question →</button>
+        </div>
+    </div>
+
+    <!-- NOTES UPLOADER SCREEN -->
+    <div id="screen-notes" class="hidden">
+        <h2>Upload Notes & Auto-Generate</h2>
+        <label>Subject Folder</label>
+        <select id="notes-folder-select" class="form-control"></select>
+        <label>Quiz Title</label>
+        <input type="text" id="notes-title" class="form-control" placeholder="e.g., First World War Revision">
+        <label>Paste Study Notes</label>
+        <textarea id="notes-text" class="form-control" style="height: 180px;" placeholder="Paste text here..."></textarea>
+        <div style="display: flex; gap: 10px;">
+            <button class="btn" onclick="generateFromNotes()">⚡ Auto-Generate</button>
+            <button class="btn btn-secondary" onclick="showScreen('screen-dashboard')">Cancel</button>
+        </div>
+    </div>
+
+    <!-- JSON IMPORT SCREEN -->
+    <div id="screen-json" class="hidden">
+        <h2>Import via JSON Code</h2>
+        <label>Subject Folder</label>
+        <select id="json-folder-select" class="form-control"></select>
+        <label>Quiz Title</label>
+        <input type="text" id="json-title" class="form-control" placeholder="e.g., Chemistry Test Deck">
+        <label>JSON Code</label>
+        <textarea id="json-text" class="form-control" style="height: 180px;" placeholder="Paste JSON Array here..."></textarea>
+        <div style="display: flex; gap: 10px;">
+            <button class="btn" onclick="importJsonQuiz()">Import Deck</button>
+            <button class="btn btn-secondary" onclick="showScreen('screen-dashboard')">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// USER AUTH & STORAGE SYSTEM
+let accounts = JSON.parse(localStorage.getItem('qc_accounts')) || {};
+let currentUser = localStorage.getItem('qc_current_user') || null;
+
+let isSignupMode = false;
+let userFolders = [];
+let userQuizzes = [];
+let userXP = 0;
+let userLevel = 1;
+let userHistory = {};
+
+let currentFolder = 'All';
+let activeQuiz = null;
+let activeQIndex = 0;
+let selectedOption = null;
+let selectedConfidence = null;
+let streakCounter = 0;
+
+function saveUserData() {
+    if (!currentUser) return;
+    accounts[currentUser].folders = userFolders;
+    accounts[currentUser].quizzes = userQuizzes;
+    accounts[currentUser].xp = userXP;
+    accounts[currentUser].level = userLevel;
+    accounts[currentUser].history = userHistory;
+
+    localStorage.setItem('qc_accounts', JSON.stringify(accounts));
+}
+
+function loadUserData() {
+    if (!currentUser || !accounts[currentUser]) return;
+    const u = accounts[currentUser];
+    userFolders = u.folders || ['History', 'Biology', 'Chemistry'];
+    userQuizzes = u.quizzes || [];
+    userXP = u.xp || 0;
+    userLevel = u.level || 1;
+    userHistory = u.history || {};
+}
+
+function toggleAuthMode() {
+    isSignupMode = !isSignupMode;
+    document.getElementById('auth-title').innerText = isSignupMode ? 'Create Account' : 'Log In';
+    document.getElementById('auth-toggle-text').innerText = isSignupMode ? 'Already have an account?' : 'Need an account?';
+}
+
+function handleAuthSubmit() {
+    const user = document.getElementById('auth-username').value.trim();
+    const pass = document.getElementById('auth-password').value.trim();
+
+    if (!user || !pass) return alert('Please fill in both fields.');
+
+    if (isSignupMode) {
+        if (accounts[user]) return alert('Username already exists!');
+        accounts[user] = { password: pass, folders: ['History', 'Biology', 'Chemistry'], quizzes: [], xp: 0, level: 1, history: {} };
+        localStorage.setItem('qc_accounts', JSON.stringify(accounts));
+        currentUser = user;
+        localStorage.setItem('qc_current_user', user);
+        initUserSession();
+    } else {
+        if (!accounts[user] || accounts[user].password !== pass) return alert('Invalid username or password.');
+        currentUser = user;
+        localStorage.setItem('qc_current_user', user);
+        initUserSession();
+    }
+}
+
+function initUserSession() {
+    loadUserData();
+    document.getElementById('user-display-name').innerText = `👤 ${currentUser}`;
+    document.getElementById('logout-btn').style.display = 'inline-flex';
+    checkSharedURL();
+    showScreen('screen-dashboard');
+}
+
+function logoutUser() {
+    currentUser = null;
+    localStorage.removeItem('qc_current_user');
+    document.getElementById('user-display-name').innerText = '👤 Guest';
+    document.getElementById('logout-btn').style.display = 'none';
+    showScreen('screen-auth');
+}
+
+function recordActivity() {
+    const today = new Date().toISOString().split('T')[0];
+    userHistory[today] = (userHistory[today] || 0) + 1;
+    saveUserData();
+}
+
+function addXP(amount) {
+    userXP += amount;
+    userLevel = Math.floor(userXP / 100) + 1;
+    recordActivity();
+    saveUserData();
+    updateUserStats();
+}
+
+function updateUserStats() {
+    document.getElementById('user-xp').innerText = `⚡ ${userXP} XP`;
+    document.getElementById('user-level').innerText = `🏆 Lv. ${userLevel}`;
+}
+
+function showScreen(id) {
+    ['screen-auth', 'screen-dashboard', 'screen-gameplay', 'screen-notes', 'screen-json'].forEach(s => {
+        document.getElementById(s).classList.add('hidden');
+    });
+    document.getElementById(id).classList.remove('hidden');
+    if (id === 'screen-dashboard') renderDashboard();
+    if (id === 'screen-notes') populateSelect('notes-folder-select');
+    if (id === 'screen-json') populateSelect('json-folder-select');
+}
+
+function renderDashboard() {
+    updateUserStats();
+    renderHeatmap();
+
+    const folderList = document.getElementById('folder-list');
+    folderList.innerHTML = `<li class="folder-item ${currentFolder === 'All' ? 'active' : ''}" onclick="selectFolder('All')">📂 All Subjects</li>`;
+    userFolders.forEach(f => {
+        folderList.innerHTML += `<li class="folder-item ${currentFolder === f ? 'active' : ''}" onclick="selectFolder('${f}')">📁 ${f}</li>`;
+    });
+
+    const grid = document.getElementById('quiz-grid');
+    grid.innerHTML = '';
+    const filtered = currentFolder === 'All' ? userQuizzes : userQuizzes.filter(q => q.category === currentFolder);
+
+    if (filtered.length === 0) {
+        grid.innerHTML = `<p style="color: var(--text-muted); grid-column: 1/-1;">No quizzes available in this folder.</p>`;
+    } else {
+        filtered.forEach((q) => {
+            const realIndex = userQuizzes.indexOf(q);
+            grid.innerHTML += `
+                <div class="quiz-card">
+                    <div>
+                        <span class="badge">${q.category}</span>
+                        <h3 style="margin: 10px 0 6px 0; font-size: 1.05rem;">${q.title}</h3>
+                        <p style="color: var(--text-muted); font-size: 0.8rem;">${q.questions.length} Items</p>
+                    </div>
+                    <div style="display: flex; gap: 6px; margin-top: 14px;">
+                        <button class="btn" style="flex: 1;" onclick="startQuiz(${realIndex})">Play</button>
+                        <button class="btn btn-secondary" onclick="shareQuiz(${realIndex})">🔗 Share</button>
+                    </div>
+                </div>
+            `;
+        });
+    }
+}
+
+function renderHeatmap() {
+    const container = document.getElementById('heatmap-container');
+    container.innerHTML = '';
+    const days = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+    
+    for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const dateStr = d.toISOString().split('T')[0];
+        const count = userHistory[dateStr] || 0;
+        
+        const cell = document.createElement('div');
+        cell.className = `heatmap-cell ${count > 0 ? 'active' : ''}`;
+        cell.innerText = days[d.getDay()];
+        cell.title = `${dateStr}: ${count} activities`;
+        container.appendChild(cell);
+    }
+}
+
+function selectFolder(f) { currentFolder = f; renderDashboard(); }
+function addFolder() {
+    const name = prompt('New Folder Name:');
+    if (name && !userFolders.includes(name)) { userFolders.push(name); saveUserData(); renderDashboard(); }
+}
+
+function populateSelect(id) {
+    const select = document.getElementById(id);
+    select.innerHTML = '';
+    userFolders.forEach(f => select.innerHTML += `<option value="${f}">${f}</option>`);
+}
+
+function startQuiz(idx) {
+    activeQuiz = userQuizzes[idx];
+    activeQIndex = 0;
+    streakCounter = 0;
+    showScreen('screen-gameplay');
+    document.getElementById('quiz-badge').innerText = activeQuiz.category;
+    renderQuizQuestion();
+}
+
+function renderQuizQuestion() {
+    const q = activeQuiz.questions[activeQIndex];
+    document.getElementById('quiz-question-text').innerText = `${activeQIndex + 1}. ${q.question}`;
+    document.getElementById('quiz-adaptive-status').innerText = streakCounter > 2 ? '🔥 Adaptive Boost Enabled' : 'Mode: Standard';
+    
+    const container = document.getElementById('quiz-options-container');
+    container.innerHTML = '';
+    document.getElementById('quiz-feedback').classList.add('hidden');
+    document.getElementById('confidence-step').classList.add('hidden');
+    document.getElementById('quiz-next-btn').style.display = 'none';
+
+    const opts = q.type === 'tf' ? ['True', 'False'] : q.options;
+    opts.forEach((opt, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-secondary option-btn-item';
+        btn.style.justifyContent = 'flex-start';
+        btn.innerText = opt;
+        btn.onclick = () => selectAnswerOption(q.type === 'tf' ? opt : i, btn);
+        container.appendChild(btn);
+    });
+}
+
+function selectAnswerOption(ans, btn) {
+    selectedOption = { ans, btn };
+    document.querySelectorAll('.option-btn-item').forEach(b => b.style.borderColor = 'var(--border-color)');
+    btn.style.borderColor = 'var(--accent-cyan)';
+    document.getElementById('confidence-step').classList.remove('hidden');
+}
+
+function setConfidence(level) {
+    selectedConfidence = level;
+    document.getElementById('confidence-step').classList.add('hidden');
+    evaluateSelectedAnswer();
+}
+
+function evaluateSelectedAnswer() {
+    const q = activeQuiz.questions[activeQIndex];
+    const isCorrect = q.type === 'tf' ? (selectedOption.ans === q.answer) : (selectedOption.ans === q.answer);
+    
+    if (isCorrect) {
+        selectedOption.btn.style.background = 'var(--success)';
+        streakCounter++;
+        addXP(selectedConfidence === 'Certain' ? 25 : 15);
+    } else {
+        selectedOption.btn.style.background = 'var(--danger)';
+        streakCounter = 0;
+    }
+
+    const feedback = document.getElementById('quiz-feedback');
+    feedback.classList.remove('hidden');
+    feedback.innerText = `[Confidence: ${selectedConfidence}] Explanation: ${q.explanation || 'No explanation provided.'}`;
+    document.getElementById('quiz-next-btn').style.display = 'inline-flex';
+}
+
+function nextQuizQuestion() {
+    activeQIndex++;
+    if (activeQIndex < activeQuiz.questions.length) {
+        renderQuizQuestion();
+    } else {
+        alert('Quiz completed!');
+        showScreen('screen-dashboard');
+    }
+}
+
+function generateFromNotes() {
+    const title = document.getElementById('notes-title').value || 'Generated Quiz';
+    const folder = document.getElementById('notes-folder-select').value;
+    const text = document.getElementById('notes-text').value;
+
+    const sentences = text.split(/(?<=[.?!])\s+/).filter(s => s.length > 15);
+    let generated = [];
+
+    sentences.forEach(s => {
+        if (s.includes(' is ') || s.includes(' are ')) {
+            const parts = s.split(/ is | are /);
+            generated.push({
+                type: 'mc',
+                question: `What is ${parts[0].trim()}?`,
+                options: [parts[1].trim(), 'An unrelated concept.', 'An opposing force.', 'None of these.'],
+                answer: 0,
+                explanation: s
+            });
+        }
+    });
+
+    userQuizzes.push({ title, category: folder, questions: generated });
+    saveUserData();
+    showScreen('screen-dashboard');
+}
+
+function importJsonQuiz() {
+    const title = document.getElementById('json-title').value || 'Imported Quiz';
+    const folder = document.getElementById('json-folder-select').value;
+    const text = document.getElementById('json-text').value;
+
+    try {
+        const questions = JSON.parse(text);
+        userQuizzes.push({ title, category: folder, questions });
+        saveUserData();
+        showScreen('screen-dashboard');
+    } catch(e) { alert('Invalid JSON structure.'); }
+}
+
+function shareQuiz(idx) {
+    const q = userQuizzes[idx];
+    const encoded = btoa(JSON.stringify(q));
+    const shareUrl = `${window.location.origin}${window.location.pathname}#${encoded}`;
+    navigator.clipboard.writeText(shareUrl);
+    alert('Public share link copied to clipboard!');
+}
+
+function checkSharedURL() {
+    const hash = window.location.hash.substring(1);
+    if (hash && currentUser) {
+        try {
+            const decoded = JSON.parse(atob(hash));
+            userQuizzes.push(decoded);
+            saveUserData();
+            alert(`Imported shared quiz: "${decoded.title}"!`);
+            window.location.hash = '';
+        } catch(e) { console.error('Invalid link.'); }
+    }
+}
+
+function toggleDyslexicFont() { document.body.classList.toggle('dyslexic-font'); }
+
+if (currentUser && accounts[currentUser]) {
+    initUserSession();
+} else {
+    showScreen('screen-auth');
+}
+</script>
+</body>
+</html>
