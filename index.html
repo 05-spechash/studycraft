@@ -3,10 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QuizCraft Pro — Multi-User & AI Edition</title>
+    <title>StudyCraft Pro — Timed Mode & Flashcards Edition</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Open+Dyslexic&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <style>
         :root {
             --bg-main: #0b1329;
@@ -16,6 +17,7 @@
             --primary-blue: #2563eb;
             --primary-glow: #3b82f6;
             --accent-cyan: #06b6d4;
+            --accent-purple: #8b5cf6;
             --text-main: #f8fafc;
             --text-muted: #94a3b8;
             --success: #10b981;
@@ -75,15 +77,17 @@
         .btn-secondary { background: var(--bg-card-hover); border: 1px solid var(--border-color); }
         .btn-secondary:hover { background: #2a3d6e; }
         .btn-danger { background: var(--danger); }
+        .btn-purple { background: linear-gradient(135deg, var(--accent-purple), #6d28d9); }
 
-        .auth-card {
-            max-width: 420px;
-            margin: 60px auto;
+        .auth-card, .results-card {
+            max-width: 480px;
+            margin: 40px auto;
             background: var(--bg-card);
             border: 1px solid var(--border-color);
             border-radius: var(--radius-lg);
             padding: 32px;
             box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            text-align: center;
         }
 
         .dashboard-layout { display: grid; grid-template-columns: 320px 1fr; gap: 24px; }
@@ -97,6 +101,26 @@
         }
 
         .sidebar-title { font-size: 1rem; font-weight: 700; color: var(--accent-cyan); margin-bottom: 14px; }
+
+        .special-folder-btn {
+            background: linear-gradient(135deg, #4c1d95, #2e1065);
+            border: 1px solid var(--accent-purple);
+            padding: 12px 16px;
+            border-radius: var(--radius-md);
+            color: white;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+            transition: all 0.2s ease;
+        }
+
+        .special-folder-btn:hover, .special-folder-btn.active {
+            box-shadow: 0 0 15px rgba(139, 92, 246, 0.4);
+            border-color: #a78bfa;
+        }
 
         .folder-list { list-style: none; }
         .folder-item {
@@ -136,6 +160,8 @@
             width: fit-content;
         }
 
+        .badge-purple { color: #c084fc; border: 1px solid #7e22ce; }
+
         .heatmap-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-top: 10px; }
         .heatmap-cell {
             height: 24px;
@@ -161,6 +187,7 @@
             border-radius: var(--radius-md);
             margin-top: 6px;
             margin-bottom: 14px;
+            text-align: left;
         }
 
         .source-box {
@@ -172,6 +199,7 @@
             font-size: 0.9rem;
             line-height: 1.5;
             color: var(--text-muted);
+            text-align: left;
         }
 
         .confidence-box {
@@ -181,13 +209,84 @@
             margin-top: 12px;
             border: 1px dashed var(--border-color);
         }
+
+        .stat-circle {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            border: 6px solid var(--accent-cyan);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            font-weight: 800;
+            color: white;
+            margin: 20px auto;
+            background: #0f172a;
+        }
+
+        /* FLASHCARD STYLES */
+        .flashcard-container {
+            perspective: 1000px;
+            width: 100%;
+            max-width: 500px;
+            height: 280px;
+            margin: 20px auto;
+            cursor: pointer;
+        }
+
+        .flashcard-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            transition: transform 0.6s;
+            transform-style: preserve-3d;
+        }
+
+        .flashcard-container.flipped .flashcard-inner {
+            transform: rotateY(180deg);
+        }
+
+        .flashcard-front, .flashcard-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
+            border-radius: var(--radius-lg);
+            border: 2px solid var(--accent-purple);
+            background: var(--bg-card);
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+        }
+
+        .flashcard-back {
+            transform: rotateY(180deg);
+            background: #1e1b4b;
+            border-color: #a78bfa;
+        }
+
+        .timer-badge {
+            background: #450a0a;
+            color: #fca5a5;
+            border: 1px solid var(--danger);
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-weight: 800;
+            font-size: 0.9rem;
+        }
     </style>
 </head>
 <body>
 
 <div class="app-container">
     <header>
-        <div class="brand">⚡ QuizCraft Pro</div>
+        <div class="brand">⚡ StudyCraft Pro</div>
         <div class="user-stats" id="nav-user-area">
             <span class="stat-badge" id="user-display-name">👤 Guest</span>
             <span class="stat-badge" id="user-xp">⚡ 0 XP</span>
@@ -203,14 +302,16 @@
             <h2 id="auth-title" style="margin-bottom: 8px;">Log In</h2>
             <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 20px;">Access your saved quizzes, study history, and XP.</p>
 
-            <label>Username</label>
-            <input type="text" id="auth-username" class="form-control" placeholder="Enter username">
+            <div style="text-align: left;">
+                <label>Username</label>
+                <input type="text" id="auth-username" class="form-control" placeholder="Enter username">
 
-            <label>Password</label>
-            <input type="password" id="auth-password" class="form-control" placeholder="Enter password">
+                <label>Password</label>
+                <input type="password" id="auth-password" class="form-control" placeholder="Enter password">
+            </div>
 
             <div style="display: flex; gap: 10px; margin-top: 10px;">
-                <button class="btn" style="flex:1;" onclick="handleAuthSubmit()">Submit</button>
+                <button class="btn" style="flex:1; justify-content: center;" onclick="handleAuthSubmit()">Submit</button>
             </div>
 
             <p style="text-align: center; margin-top: 16px; font-size: 0.85rem; color: var(--text-muted);">
@@ -223,6 +324,12 @@
     <!-- MAIN DASHBOARD -->
     <div id="screen-dashboard" class="dashboard-layout hidden">
         <aside>
+            <!-- BROADER FLASHCARDS HUB FOLDER -->
+            <div class="special-folder-btn" id="flashcard-folder-btn" onclick="selectFolder('__FLASHCARDS__')">
+                <span>🎴 Flashcard Decks</span>
+                <span class="badge badge-purple" id="flashcard-count-badge">0</span>
+            </div>
+
             <div class="sidebar-card">
                 <div style="display: flex; justify-content: space-between; align-items: center;" class="sidebar-title">
                     <span>Subject Folders</span>
@@ -243,8 +350,8 @@
                     <button class="btn btn-secondary" style="width: 100%; font-size: 0.8rem; margin-top: 4px;" onclick="saveApiKey()">Save Key</button>
                 </div>
 
-                <div id="chat-box" style="height: 200px; overflow-y: auto; background: #0f172a; padding: 10px; border-radius: var(--radius-md); font-size: 0.82rem; margin-bottom: 10px;">
-                    <div style="color: var(--text-muted); text-align: center;">Ask a question or request a quiz (e.g. "Make a quiz on earthquakes")!</div>
+                <div id="chat-box" style="height: 180px; overflow-y: auto; background: #0f172a; padding: 10px; border-radius: var(--radius-md); font-size: 0.82rem; margin-bottom: 10px; text-align: left;">
+                    <div style="color: var(--text-muted); text-align: center;">Ask a question or request a quiz/flashcard deck!</div>
                 </div>
 
                 <div style="display: flex; gap: 6px;">
@@ -264,7 +371,7 @@
                 <h2 id="folder-header-title">All Quizzes</h2>
                 <div style="display: flex; gap: 8px;">
                     <button class="btn btn-secondary" onclick="showScreen('screen-json')">📋 Import JSON</button>
-                    <button class="btn" onclick="showScreen('screen-notes')">📝 Notes Uploader</button>
+                    <button class="btn btn-purple" onclick="showScreen('screen-notes')">📄 Upload PPT / PDF / Notes</button>
                 </div>
             </div>
 
@@ -275,8 +382,14 @@
     <!-- GAMEPLAY / QUIZ SCREEN -->
     <div id="screen-gameplay" class="hidden">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-            <span class="badge" id="quiz-badge">Subject</span>
-            <span id="quiz-adaptive-status" style="color: var(--accent-cyan); font-weight: 700; font-size: 0.85rem;">Mode: Standard</span>
+            <div>
+                <span class="badge" id="quiz-badge">Subject</span>
+                <span id="exam-mode-badge" class="badge badge-purple hidden">⏱️ Timed Exam Mode</span>
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <div id="timer-display" class="timer-badge hidden">⏳ 15:00</div>
+                <span id="quiz-adaptive-status" style="color: var(--accent-cyan); font-weight: 700; font-size: 0.85rem;">Mode: Standard</span>
+            </div>
         </div>
 
         <h3 id="quiz-question-text" style="margin-bottom: 18px;">Question text</h3>
@@ -284,11 +397,11 @@
         <div id="quiz-options-container" style="display: flex; flex-direction: column; gap: 10px;"></div>
 
         <div id="confidence-step" class="confidence-box hidden">
-            <p style="font-size: 0.85rem; margin-bottom: 8px; color: var(--accent-cyan);">How confident are you in this answer?</p>
+            <p style="font-size: 0.85rem; margin-bottom: 8px; color: var(--accent-cyan); text-align: center;">How confident are you in this answer?</p>
             <div style="display: flex; gap: 8px;">
-                <button class="btn btn-secondary" style="flex:1;" onclick="setConfidence('Guess')">🤔 Guess</button>
-                <button class="btn btn-secondary" style="flex:1;" onclick="setConfidence('Unsure')">😐 Unsure</button>
-                <button class="btn btn-secondary" style="flex:1;" onclick="setConfidence('Certain')">🎯 Certain</button>
+                <button class="btn btn-secondary" style="flex:1; justify-content: center;" onclick="setConfidence('Guess')">🤔 Guess</button>
+                <button class="btn btn-secondary" style="flex:1; justify-content: center;" onclick="setConfidence('Unsure')">😐 Unsure</button>
+                <button class="btn btn-secondary" style="flex:1; justify-content: center;" onclick="setConfidence('Certain')">🎯 Certain</button>
             </div>
         </div>
 
@@ -299,17 +412,76 @@
         </div>
     </div>
 
-    <!-- NOTES UPLOADER SCREEN -->
+    <!-- FLASHCARD PLAYER SCREEN -->
+    <div id="screen-flashcard-player" class="hidden">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <button class="btn btn-secondary" onclick="showScreen('screen-dashboard')">← Exit Flashcards</button>
+            <span class="badge badge-purple" id="fc-progress">1 / 10</span>
+        </div>
+
+        <div class="flashcard-container" id="flashcard-card" onclick="flipFlashcard()">
+            <div class="flashcard-inner">
+                <div class="flashcard-front">
+                    <div style="font-size: 0.8rem; color: var(--accent-purple); font-weight: 700; margin-bottom: 10px;">QUESTION (Click to Flip)</div>
+                    <div id="fc-front-text" style="font-size: 1.2rem; font-weight: 600;">Front side term...</div>
+                </div>
+                <div class="flashcard-back">
+                    <div style="font-size: 0.8rem; color: var(--accent-cyan); font-weight: 700; margin-bottom: 10px;">ANSWER</div>
+                    <div id="fc-back-text" style="font-size: 1.1rem;">Back side answer definition...</div>
+                </div>
+            </div>
+        </div>
+
+        <div style="display: flex; justify-content: center; gap: 16px; margin-top: 20px;">
+            <button class="btn btn-danger" style="width: 140px; justify-content: center;" onclick="rateFlashcard(false)">❌ Needs Review</button>
+            <button class="btn" style="background: var(--success); width: 140px; justify-content: center;" onclick="rateFlashcard(true)">✅ Got It</button>
+        </div>
+    </div>
+
+    <!-- RESULTS SCREEN -->
+    <div id="screen-results" class="hidden">
+        <div class="results-card">
+            <h2>🎉 Session Completed!</h2>
+            <p style="color: var(--text-muted); margin-top: 4px;" id="results-quiz-title">Quiz Summary</p>
+            
+            <div class="stat-circle" id="results-percentage">0%</div>
+
+            <div style="display: flex; justify-content: space-around; margin: 20px 0; background: #0f172a; padding: 16px; border-radius: var(--radius-md);">
+                <div>
+                    <div style="font-size: 0.8rem; color: var(--text-muted);">Score</div>
+                    <div style="font-size: 1.2rem; font-weight: 700;" id="results-score-text">0 / 0</div>
+                </div>
+                <div>
+                    <div style="font-size: 0.8rem; color: var(--text-muted);">XP Earned</div>
+                    <div style="font-size: 1.2rem; font-weight: 700; color: var(--accent-cyan);" id="results-xp-text">+0 XP</div>
+                </div>
+            </div>
+
+            <button class="btn" style="width: 100%; justify-content: center;" onclick="showScreen('screen-dashboard')">Back to Dashboard</button>
+        </div>
+    </div>
+
+    <!-- UPLOAD NOTES / PPT / PDF SCREEN -->
     <div id="screen-notes" class="hidden">
-        <h2>Upload Notes & Auto-Generate</h2>
-        <label>Subject Folder</label>
-        <select id="notes-folder-select" class="form-control"></select>
-        <label>Quiz Title</label>
-        <input type="text" id="notes-title" class="form-control" placeholder="e.g., Geography Assessment">
-        <label>Paste Study Notes</label>
-        <textarea id="notes-text" class="form-control" style="height: 180px;" placeholder="Paste text here..."></textarea>
+        <h2>📄 Broad File & Notes Importer</h2>
+        <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 4px;">Generates both a Multiple Choice Quiz AND a Flashcard deck simultaneously!</p>
+        
+        <div style="margin-top: 14px;">
+            <label>Subject Folder</label>
+            <select id="notes-folder-select" class="form-control"></select>
+            
+            <label>Title</label>
+            <input type="text" id="notes-title" class="form-control" placeholder="e.g., Biology Chapter 4">
+            
+            <label>Upload File (.pdf, .ppt, .pptx, .txt)</label>
+            <input type="file" id="file-upload-input" accept=".pdf,.ppt,.pptx,.txt" class="form-control" onchange="handleFileSelect(event)">
+
+            <label>Or Paste Raw Notes / Presentation Text</label>
+            <textarea id="notes-text" class="form-control" style="height: 140px;" placeholder="Paste text here..."></textarea>
+        </div>
+        
         <div style="display: flex; gap: 10px;">
-            <button class="btn" onclick="generateFromNotes()">⚡ Auto-Generate</button>
+            <button class="btn btn-purple" onclick="generateFromNotes()">⚡ Auto-Generate Quiz + Flashcards</button>
             <button class="btn btn-secondary" onclick="showScreen('screen-dashboard')">Cancel</button>
         </div>
     </div>
@@ -317,12 +489,14 @@
     <!-- JSON IMPORT SCREEN -->
     <div id="screen-json" class="hidden">
         <h2>Import via JSON Code</h2>
-        <label>Subject Folder</label>
-        <select id="json-folder-select" class="form-control"></select>
-        <label>Quiz Title</label>
-        <input type="text" id="json-title" class="form-control" placeholder="e.g., Geography Revision Deck">
-        <label>JSON Code</label>
-        <textarea id="json-text" class="form-control" style="height: 180px;" placeholder="Paste JSON Array here..."></textarea>
+        <div style="margin-top: 14px;">
+            <label>Subject Folder</label>
+            <select id="json-folder-select" class="form-control"></select>
+            <label>Quiz Title</label>
+            <input type="text" id="json-title" class="form-control" placeholder="e.g., Geography Revision Deck">
+            <label>JSON Code</label>
+            <textarea id="json-text" class="form-control" style="height: 180px;" placeholder="Paste JSON Array here..."></textarea>
+        </div>
         <div style="display: flex; gap: 10px;">
             <button class="btn" onclick="importJsonQuiz()">Import Deck</button>
             <button class="btn btn-secondary" onclick="showScreen('screen-dashboard')">Cancel</button>
@@ -331,6 +505,11 @@
 </div>
 
 <script>
+// pdf.js worker configuration
+if (window.pdfjsLib) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+}
+
 // USER AUTH & LOCAL STORAGE SYSTEM
 let accounts = JSON.parse(localStorage.getItem('qc_accounts')) || {};
 let currentUser = localStorage.getItem('qc_current_user') || null;
@@ -339,6 +518,7 @@ let geminiApiKey = localStorage.getItem('qc_gemini_key') || '';
 let isSignupMode = false;
 let userFolders = [];
 let userQuizzes = [];
+let userFlashcards = [];
 let userXP = 0;
 let userLevel = 1;
 let userHistory = {};
@@ -349,11 +529,24 @@ let activeQIndex = 0;
 let selectedOption = null;
 let selectedConfidence = null;
 let streakCounter = 0;
+let correctAnswersCount = 0;
+let sessionXpEarned = 0;
+
+// TIMED EXAM MODE VARIABLES
+let isTimedMode = false;
+let examTimerInterval = null;
+let examTimeRemaining = 0;
+let userExamAnswers = [];
+
+// FLASHCARD GAMEPLAY VARIABLES
+let activeFcDeck = null;
+let activeFcIndex = 0;
 
 function saveUserData() {
     if (!currentUser) return;
     accounts[currentUser].folders = userFolders;
     accounts[currentUser].quizzes = userQuizzes;
+    accounts[currentUser].flashcards = userFlashcards;
     accounts[currentUser].xp = userXP;
     accounts[currentUser].level = userLevel;
     accounts[currentUser].history = userHistory;
@@ -366,6 +559,7 @@ function loadUserData() {
     const u = accounts[currentUser];
     userFolders = u.folders || ['Geography', 'History', 'Science'];
     userQuizzes = u.quizzes || [];
+    userFlashcards = u.flashcards || [];
     userXP = u.xp || 0;
     userLevel = u.level || 1;
     userHistory = u.history || {};
@@ -385,7 +579,7 @@ function handleAuthSubmit() {
 
     if (isSignupMode) {
         if (accounts[user]) return alert('Username already exists!');
-        accounts[user] = { password: pass, folders: ['Geography', 'History', 'Science'], quizzes: [], xp: 0, level: 1, history: {} };
+        accounts[user] = { password: pass, folders: ['Geography', 'History', 'Science'], quizzes: [], flashcards: [], xp: 0, level: 1, history: {} };
         localStorage.setItem('qc_accounts', JSON.stringify(accounts));
         currentUser = user;
         localStorage.setItem('qc_current_user', user);
@@ -422,6 +616,7 @@ function recordActivity() {
 
 function addXP(amount) {
     userXP += amount;
+    sessionXpEarned += amount;
     userLevel = Math.floor(userXP / 100) + 1;
     recordActivity();
     saveUserData();
@@ -431,10 +626,12 @@ function addXP(amount) {
 function updateUserStats() {
     document.getElementById('user-xp').innerText = `⚡ ${userXP} XP`;
     document.getElementById('user-level').innerText = `🏆 Lv. ${userLevel}`;
+    document.getElementById('flashcard-count-badge').innerText = userFlashcards.length;
 }
 
 function showScreen(id) {
-    ['screen-auth', 'screen-dashboard', 'screen-gameplay', 'screen-notes', 'screen-json'].forEach(s => {
+    if (examTimerInterval) clearInterval(examTimerInterval);
+    ['screen-auth', 'screen-dashboard', 'screen-gameplay', 'screen-flashcard-player', 'screen-results', 'screen-notes', 'screen-json'].forEach(s => {
         document.getElementById(s).classList.add('hidden');
     });
     document.getElementById(id).classList.remove('hidden');
@@ -448,6 +645,16 @@ function renderDashboard() {
     renderHeatmap();
 
     const folderList = document.getElementById('folder-list');
+    const flashBtn = document.getElementById('flashcard-folder-btn');
+    
+    if (currentFolder === '__FLASHCARDS__') {
+        flashBtn.classList.add('active');
+        document.getElementById('folder-header-title').innerText = '🎴 Flashcard Decks';
+    } else {
+        flashBtn.classList.remove('active');
+        document.getElementById('folder-header-title').innerText = currentFolder === 'All' ? 'All Quizzes' : `Folder: ${currentFolder}`;
+    }
+
     folderList.innerHTML = `<li class="folder-item ${currentFolder === 'All' ? 'active' : ''}" onclick="selectFolder('All')">📂 All Subjects</li>`;
     userFolders.forEach(f => {
         folderList.innerHTML += `<li class="folder-item ${currentFolder === f ? 'active' : ''}" onclick="selectFolder('${f}')">📁 ${f}</li>`;
@@ -455,27 +662,52 @@ function renderDashboard() {
 
     const grid = document.getElementById('quiz-grid');
     grid.innerHTML = '';
-    const filtered = currentFolder === 'All' ? userQuizzes : userQuizzes.filter(q => q.category === currentFolder);
 
-    if (filtered.length === 0) {
-        grid.innerHTML = `<p style="color: var(--text-muted); grid-column: 1/-1;">No quizzes available in this folder.</p>`;
+    if (currentFolder === '__FLASHCARDS__') {
+        if (userFlashcards.length === 0) {
+            grid.innerHTML = `<p style="color: var(--text-muted); grid-column: 1/-1;">No flashcard decks available yet. Upload notes to create your first deck!</p>`;
+        } else {
+            userFlashcards.forEach((deck, idx) => {
+                grid.innerHTML += `
+                    <div class="quiz-card" style="border-color: var(--accent-purple);">
+                        <div>
+                            <span class="badge badge-purple">${deck.category}</span>
+                            <h3 style="margin: 10px 0 6px 0; font-size: 1.05rem;">🎴 ${deck.title}</h3>
+                            <p style="color: var(--text-muted); font-size: 0.8rem;">${deck.cards.length} Flashcards</p>
+                        </div>
+                        <div style="display: flex; gap: 6px; margin-top: 14px;">
+                            <button class="btn btn-purple" style="flex: 1;" onclick="startFlashcardDeck(${idx})">Study Cards</button>
+                        </div>
+                    </div>
+                `;
+            });
+        }
     } else {
-        filtered.forEach((q) => {
-            const realIndex = userQuizzes.indexOf(q);
-            grid.innerHTML += `
-                <div class="quiz-card">
-                    <div>
-                        <span class="badge">${q.category}</span>
-                        <h3 style="margin: 10px 0 6px 0; font-size: 1.05rem;">${q.title}</h3>
-                        <p style="color: var(--text-muted); font-size: 0.8rem;">${q.questions.length} Items</p>
+        const filtered = currentFolder === 'All' ? userQuizzes : userQuizzes.filter(q => q.category === currentFolder);
+
+        if (filtered.length === 0) {
+            grid.innerHTML = `<p style="color: var(--text-muted); grid-column: 1/-1;">No quizzes available in this folder.</p>`;
+        } else {
+            filtered.forEach((q) => {
+                const realIndex = userQuizzes.indexOf(q);
+                grid.innerHTML += `
+                    <div class="quiz-card">
+                        <div>
+                            <span class="badge">${q.category}</span>
+                            <h3 style="margin: 10px 0 6px 0; font-size: 1.05rem;">${q.title}</h3>
+                            <p style="color: var(--text-muted); font-size: 0.8rem;">${q.questions.length} Items</p>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 14px;">
+                            <div style="display: flex; gap: 6px;">
+                                <button class="btn" style="flex: 1;" onclick="startQuiz(${realIndex}, false)">Play Normal</button>
+                                <button class="btn btn-secondary" onclick="shareQuiz(${realIndex})">🔗</button>
+                            </div>
+                            <button class="btn btn-secondary" style="width: 100%; justify-content: center; font-size: 0.8rem; color: #fca5a5;" onclick="startQuiz(${realIndex}, true)">⏱️ Timed Exam Mode</button>
+                        </div>
                     </div>
-                    <div style="display: flex; gap: 6px; margin-top: 14px;">
-                        <button class="btn" style="flex: 1;" onclick="startQuiz(${realIndex})">Play</button>
-                        <button class="btn btn-secondary" onclick="shareQuiz(${realIndex})">🔗 Share</button>
-                    </div>
-                </div>
-            `;
-        });
+                `;
+            });
+        }
     }
 }
 
@@ -510,13 +742,49 @@ function populateSelect(id) {
     userFolders.forEach(f => select.innerHTML += `<option value="${f}">${f}</option>`);
 }
 
-function startQuiz(idx) {
+// TIMED EXAM & QUIZ LOGIC
+function startQuiz(idx, timedMode = false) {
     activeQuiz = userQuizzes[idx];
     activeQIndex = 0;
     streakCounter = 0;
+    correctAnswersCount = 0;
+    sessionXpEarned = 0;
+    isTimedMode = timedMode;
+    userExamAnswers = [];
+
     showScreen('screen-gameplay');
     document.getElementById('quiz-badge').innerText = activeQuiz.category;
+
+    if (isTimedMode) {
+        document.getElementById('exam-mode-badge').classList.remove('hidden');
+        document.getElementById('timer-display').classList.remove('hidden');
+        examTimeRemaining = activeQuiz.questions.length * 45; // 45 seconds per question
+        startExamTimer();
+    } else {
+        document.getElementById('exam-mode-badge').classList.add('hidden');
+        document.getElementById('timer-display').classList.add('hidden');
+    }
+
     renderQuizQuestion();
+}
+
+function startExamTimer() {
+    updateTimerDisplay();
+    examTimerInterval = setInterval(() => {
+        examTimeRemaining--;
+        updateTimerDisplay();
+        if (examTimeRemaining <= 0) {
+            clearInterval(examTimerInterval);
+            alert('⏱️ Time is up! Submitting your exam automatically.');
+            finishQuizSession();
+        }
+    }, 1000);
+}
+
+function updateTimerDisplay() {
+    const mins = Math.floor(examTimeRemaining / 60);
+    const secs = examTimeRemaining % 60;
+    document.getElementById('timer-display').innerText = `⏳ ${mins}:${secs < 10 ? '0' : ''}${secs}`;
 }
 
 function renderQuizQuestion() {
@@ -545,7 +813,12 @@ function selectAnswerOption(ans, btn) {
     selectedOption = { ans, btn };
     document.querySelectorAll('.option-btn-item').forEach(b => b.style.borderColor = 'var(--border-color)');
     btn.style.borderColor = 'var(--accent-cyan)';
-    document.getElementById('confidence-step').classList.remove('hidden');
+
+    if (isTimedMode) {
+        document.getElementById('quiz-next-btn').style.display = 'inline-flex';
+    } else {
+        document.getElementById('confidence-step').classList.remove('hidden');
+    }
 }
 
 function setConfidence(level) {
@@ -561,6 +834,7 @@ function evaluateSelectedAnswer() {
     if (isCorrect) {
         selectedOption.btn.style.background = 'var(--success)';
         streakCounter++;
+        correctAnswersCount++;
         addXP(selectedConfidence === 'Certain' ? 25 : 15);
     } else {
         selectedOption.btn.style.background = 'var(--danger)';
@@ -574,37 +848,149 @@ function evaluateSelectedAnswer() {
 }
 
 function nextQuizQuestion() {
+    if (isTimedMode) {
+        const q = activeQuiz.questions[activeQIndex];
+        const isCorrect = q.type === 'tf' ? (selectedOption.ans === q.answer) : (selectedOption.ans === q.answer);
+        if (isCorrect) {
+            correctAnswersCount++;
+            addXP(20);
+        }
+    }
+
     activeQIndex++;
     if (activeQIndex < activeQuiz.questions.length) {
         renderQuizQuestion();
     } else {
-        alert('Quiz completed!');
+        finishQuizSession();
+    }
+}
+
+function finishQuizSession() {
+    if (examTimerInterval) clearInterval(examTimerInterval);
+    const total = activeQuiz.questions.length;
+    const percentage = Math.round((correctAnswersCount / total) * 100);
+    
+    document.getElementById('results-quiz-title').innerText = activeQuiz.title + (isTimedMode ? ' (Timed Exam)' : '');
+    document.getElementById('results-percentage').innerText = `${percentage}%`;
+    document.getElementById('results-score-text').innerText = `${correctAnswersCount} / ${total}`;
+    document.getElementById('results-xp-text').innerText = `+${sessionXpEarned} XP`;
+    
+    showScreen('screen-results');
+}
+
+// FLASHCARD SYSTEM
+function startFlashcardDeck(idx) {
+    activeFcDeck = userFlashcards[idx];
+    activeFcIndex = 0;
+    showScreen('screen-flashcard-player');
+    renderFlashcard();
+}
+
+function renderFlashcard() {
+    const card = activeFcDeck.cards[activeFcIndex];
+    document.getElementById('flashcard-card').classList.remove('flipped');
+    document.getElementById('fc-progress').innerText = `${activeFcIndex + 1} / ${activeFcDeck.cards.length}`;
+    document.getElementById('fc-front-text').innerText = card.front;
+    document.getElementById('fc-back-text').innerText = card.back;
+}
+
+function flipFlashcard() {
+    document.getElementById('flashcard-card').classList.toggle('flipped');
+}
+
+function rateFlashcard(gotIt) {
+    if (gotIt) addXP(10);
+    activeFcIndex++;
+    if (activeFcIndex < activeFcDeck.cards.length) {
+        renderFlashcard();
+    } else {
+        alert('🎉 Deck Completed! Great revision session.');
         showScreen('screen-dashboard');
     }
 }
 
+// FILE & NOTES UPLOADER WITH PDF/PPT SUPPORT
+let extractedFileText = '';
+
+async function handleFileSelect(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const fileExt = file.name.split('.').pop().toLowerCase();
+    
+    if (fileExt === 'pdf') {
+        const fileReader = new FileReader();
+        fileReader.onload = async function() {
+            const typedarray = new Uint8Array(this.result);
+            const pdf = await pdfjsLib.getDocument(typedarray).promise;
+            let text = '';
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const content = await page.getTextContent();
+                text += content.items.map(item => item.str).join(' ') + '\n';
+            }
+            extractedFileText = text;
+            document.getElementById('notes-text').value = text;
+        };
+        fileReader.readAsArrayBuffer(file);
+    } else {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            extractedFileText = e.target.result;
+            document.getElementById('notes-text').value = e.target.result;
+        };
+        reader.readAsText(file);
+    }
+}
+
 function generateFromNotes() {
-    const title = document.getElementById('notes-title').value || 'Generated Quiz';
+    const title = document.getElementById('notes-title').value || 'Uploaded Deck';
     const folder = document.getElementById('notes-folder-select').value;
     const text = document.getElementById('notes-text').value;
 
+    if (!text.trim()) return alert('Please enter or upload study notes first.');
+
     const sentences = text.split(/(?<=[.?!])\s+/).filter(s => s.length > 15);
-    let generated = [];
+    let generatedQuestions = [];
+    let generatedFlashcards = [];
 
     sentences.forEach(s => {
         if (s.includes(' is ') || s.includes(' are ')) {
             const parts = s.split(/ is | are /);
-            generated.push({
+            const frontTerm = parts[0].trim();
+            const backDef = parts[1].trim();
+
+            generatedQuestions.push({
                 type: 'mc',
-                question: `What is ${parts[0].trim()}?`,
-                options: [parts[1].trim(), 'An unrelated concept.', 'An opposing force.', 'None of these.'],
+                question: `What is ${frontTerm}?`,
+                options: [backDef, 'An unrelated concept.', 'An opposing force.', 'None of these.'],
                 answer: 0,
                 explanation: s
+            });
+
+            generatedFlashcards.push({
+                front: frontTerm,
+                back: backDef
             });
         }
     });
 
-    userQuizzes.push({ title, category: folder, questions: generated });
+    if (generatedQuestions.length === 0) {
+        generatedQuestions.push({
+            type: 'tf',
+            question: text.substring(0, 80) + '...?',
+            answer: 'True',
+            explanation: 'Generated from notes summary.'
+        });
+        generatedFlashcards.push({
+            front: title,
+            back: text.substring(0, 150) + '...'
+        });
+    }
+
+    userQuizzes.push({ title: title + ' Quiz', category: folder, questions: generatedQuestions });
+    userFlashcards.push({ title: title + ' Flashcards', category: folder, cards: generatedFlashcards });
+    
     saveUserData();
     showScreen('screen-dashboard');
 }
@@ -646,9 +1032,7 @@ function checkSharedURL() {
 function toggleDyslexicFont() { document.body.classList.toggle('dyslexic-font'); }
 
 // AI CHATBOT FUNCTIONS
-function toggleApiKeyInput() {
-    document.getElementById('api-key-box').classList.toggle('hidden');
-}
+function toggleApiKeyInput() { document.getElementById('api-key-box').classList.toggle('hidden'); }
 
 function saveApiKey() {
     const key = document.getElementById('user-api-key').value.trim();
@@ -672,7 +1056,6 @@ async function sendAiMessage() {
     }
 
     const chatBox = document.getElementById('chat-box');
-
     chatBox.innerHTML += `<div style="margin-bottom: 8px; text-align: right;"><span style="background: var(--primary-blue); padding: 6px 10px; border-radius: 10px; display: inline-block;">${userText}</span></div>`;
     inputEl.value = '';
     chatBox.scrollTop = chatBox.scrollHeight;
@@ -681,28 +1064,16 @@ async function sendAiMessage() {
     chatBox.innerHTML += `<div id="${loadingId}" style="margin-bottom: 8px;"><span style="background: var(--bg-card-hover); padding: 6px 10px; border-radius: 10px; display: inline-block; color: var(--accent-cyan);">Generating...</span></div>`;
     chatBox.scrollTop = chatBox.scrollHeight;
 
-    const systemPrompt = `You are an AI study assistant for QuizCraft Pro. 
-If the user asks you to create or generate a quiz on a topic, respond ONLY with a raw valid JSON array of question objects without markdown formatting or backticks. 
-Each question object in the array must follow this schema:
-[
-  {
-    "type": "mc" or "tf",
-    "question": "question string",
-    "options": ["Option A", "Option B", "Option C", "Option D"] (only if type is "mc"),
-    "answer": integer index 0-3 for mc OR "True"/"False" string for tf,
-    "explanation": "brief explanation"
-  }
-]
-If the user is asking a general study question, answer it concisely in plain text.`;
+    const systemPrompt = `You are an AI study assistant for StudyCraft Pro. 
+If the user asks to generate a quiz, return ONLY raw valid JSON array of questions.
+If general, answer concisely.`;
 
     try {
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                contents: [{
-                    parts: [{ text: `${systemPrompt}\n\nUser request: ${userText}` }]
-                }]
+                contents: [{ parts: [{ text: `${systemPrompt}\n\nUser request: ${userText}` }] }]
             })
         });
 
@@ -711,17 +1082,16 @@ If the user is asking a general study question, answer it concisely in plain tex
 
         if (data.candidates && data.candidates[0].content.parts[0].text) {
             let aiReply = data.candidates[0].content.parts[0].text.trim();
-            
             if (aiReply.startsWith('```json')) aiReply = aiReply.replace(/^```json/, '').replace(/```$/, '').trim();
             if (aiReply.startsWith('```')) aiReply = aiReply.replace(/^```/, '').replace(/```$/, '').trim();
 
             chatBox.innerHTML += `<div style="margin-bottom: 8px;"><span style="background: var(--bg-card-hover); padding: 8px 12px; border-radius: 10px; display: inline-block; white-space: pre-wrap; font-family: monospace;">${aiReply}</span></div>`;
         } else {
-            chatBox.innerHTML += `<div style="margin-bottom: 8px; color: var(--danger);">Error generating response. Check API key.</div>`;
+            chatBox.innerHTML += `<div style="margin-bottom: 8px; color: var(--danger);">Error generating response.</div>`;
         }
     } catch (error) {
         document.getElementById(loadingId).remove();
-        chatBox.innerHTML += `<div style="margin-bottom: 8px; color: var(--danger);">Network error. Try again.</div>`;
+        chatBox.innerHTML += `<div style="margin-bottom: 8px; color: var(--danger);">Network error.</div>`;
     }
 
     chatBox.scrollTop = chatBox.scrollHeight;
