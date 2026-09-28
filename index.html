@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QuizCraft Pro — Multi-User Edition</title>
+    <title>QuizCraft Pro — Multi-User & AI Edition</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Open+Dyslexic&display=swap" rel="stylesheet">
@@ -86,7 +86,7 @@
             box-shadow: 0 10px 25px rgba(0,0,0,0.5);
         }
 
-        .dashboard-layout { display: grid; grid-template-columns: 280px 1fr; gap: 24px; }
+        .dashboard-layout { display: grid; grid-template-columns: 320px 1fr; gap: 24px; }
 
         .sidebar-card {
             background: var(--bg-card);
@@ -111,7 +111,7 @@
 
         .folder-item:hover, .folder-item.active { background: var(--bg-card-hover); color: var(--accent-cyan); }
 
-        .quiz-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 18px; }
+        .quiz-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 18px; }
 
         .quiz-card {
             background: var(--bg-card);
@@ -231,6 +231,28 @@
                 <ul class="folder-list" id="folder-list"></ul>
             </div>
 
+            <!-- AI STUDY CHATBOT WIDGET -->
+            <div id="ai-chat-widget" class="sidebar-card">
+                <div class="sidebar-title" style="display: flex; justify-content: space-between; align-items: center;">
+                    <span>🤖 AI Assistant</span>
+                    <button class="btn btn-secondary" style="padding: 2px 6px; font-size: 0.75rem;" onclick="toggleApiKeyInput()">⚙️ Key</button>
+                </div>
+
+                <div id="api-key-box" class="hidden" style="margin-bottom: 10px;">
+                    <input type="password" id="user-api-key" class="form-control" placeholder="Paste Gemini API Key...">
+                    <button class="btn btn-secondary" style="width: 100%; font-size: 0.8rem; margin-top: 4px;" onclick="saveApiKey()">Save Key</button>
+                </div>
+
+                <div id="chat-box" style="height: 200px; overflow-y: auto; background: #0f172a; padding: 10px; border-radius: var(--radius-md); font-size: 0.82rem; margin-bottom: 10px;">
+                    <div style="color: var(--text-muted); text-align: center;">Ask a question or request a quiz (e.g. "Make a quiz on earthquakes")!</div>
+                </div>
+
+                <div style="display: flex; gap: 6px;">
+                    <input type="text" id="chat-input" class="form-control" style="margin: 0;" placeholder="Ask AI..." onkeypress="if(event.key==='Enter') sendAiMessage()">
+                    <button class="btn" style="padding: 6px 12px;" onclick="sendAiMessage()">Send</button>
+                </div>
+            </div>
+
             <div class="sidebar-card">
                 <div class="sidebar-title">📅 7-Day Activity Heatmap</div>
                 <div class="heatmap-grid" id="heatmap-container"></div>
@@ -253,7 +275,7 @@
     <!-- GAMEPLAY / QUIZ SCREEN -->
     <div id="screen-gameplay" class="hidden">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-            <span class="badge" id="quiz-badge">History</span>
+            <span class="badge" id="quiz-badge">Subject</span>
             <span id="quiz-adaptive-status" style="color: var(--accent-cyan); font-weight: 700; font-size: 0.85rem;">Mode: Standard</span>
         </div>
 
@@ -283,7 +305,7 @@
         <label>Subject Folder</label>
         <select id="notes-folder-select" class="form-control"></select>
         <label>Quiz Title</label>
-        <input type="text" id="notes-title" class="form-control" placeholder="e.g., First World War Revision">
+        <input type="text" id="notes-title" class="form-control" placeholder="e.g., Geography Assessment">
         <label>Paste Study Notes</label>
         <textarea id="notes-text" class="form-control" style="height: 180px;" placeholder="Paste text here..."></textarea>
         <div style="display: flex; gap: 10px;">
@@ -298,7 +320,7 @@
         <label>Subject Folder</label>
         <select id="json-folder-select" class="form-control"></select>
         <label>Quiz Title</label>
-        <input type="text" id="json-title" class="form-control" placeholder="e.g., Chemistry Test Deck">
+        <input type="text" id="json-title" class="form-control" placeholder="e.g., Geography Revision Deck">
         <label>JSON Code</label>
         <textarea id="json-text" class="form-control" style="height: 180px;" placeholder="Paste JSON Array here..."></textarea>
         <div style="display: flex; gap: 10px;">
@@ -309,9 +331,10 @@
 </div>
 
 <script>
-// USER AUTH & STORAGE SYSTEM
+// USER AUTH & LOCAL STORAGE SYSTEM
 let accounts = JSON.parse(localStorage.getItem('qc_accounts')) || {};
 let currentUser = localStorage.getItem('qc_current_user') || null;
+let geminiApiKey = localStorage.getItem('qc_gemini_key') || '';
 
 let isSignupMode = false;
 let userFolders = [];
@@ -341,7 +364,7 @@ function saveUserData() {
 function loadUserData() {
     if (!currentUser || !accounts[currentUser]) return;
     const u = accounts[currentUser];
-    userFolders = u.folders || ['History', 'Biology', 'Chemistry'];
+    userFolders = u.folders || ['Geography', 'History', 'Science'];
     userQuizzes = u.quizzes || [];
     userXP = u.xp || 0;
     userLevel = u.level || 1;
@@ -362,7 +385,7 @@ function handleAuthSubmit() {
 
     if (isSignupMode) {
         if (accounts[user]) return alert('Username already exists!');
-        accounts[user] = { password: pass, folders: ['History', 'Biology', 'Chemistry'], quizzes: [], xp: 0, level: 1, history: {} };
+        accounts[user] = { password: pass, folders: ['Geography', 'History', 'Science'], quizzes: [], xp: 0, level: 1, history: {} };
         localStorage.setItem('qc_accounts', JSON.stringify(accounts));
         currentUser = user;
         localStorage.setItem('qc_current_user', user);
@@ -622,6 +645,89 @@ function checkSharedURL() {
 
 function toggleDyslexicFont() { document.body.classList.toggle('dyslexic-font'); }
 
+// AI CHATBOT FUNCTIONS
+function toggleApiKeyInput() {
+    document.getElementById('api-key-box').classList.toggle('hidden');
+}
+
+function saveApiKey() {
+    const key = document.getElementById('user-api-key').value.trim();
+    if (key) {
+        geminiApiKey = key;
+        localStorage.setItem('qc_gemini_key', key);
+        alert('API Key saved successfully!');
+        toggleApiKeyInput();
+    }
+}
+
+async function sendAiMessage() {
+    const inputEl = document.getElementById('chat-input');
+    const userText = inputEl.value.trim();
+    if (!userText) return;
+
+    if (!geminiApiKey) {
+        alert('Please click the ⚙️ Key button and enter your Gemini API key first!');
+        toggleApiKeyInput();
+        return;
+    }
+
+    const chatBox = document.getElementById('chat-box');
+
+    chatBox.innerHTML += `<div style="margin-bottom: 8px; text-align: right;"><span style="background: var(--primary-blue); padding: 6px 10px; border-radius: 10px; display: inline-block;">${userText}</span></div>`;
+    inputEl.value = '';
+    chatBox.scrollTop = chatBox.scrollHeight;
+
+    const loadingId = 'loading-' + Date.now();
+    chatBox.innerHTML += `<div id="${loadingId}" style="margin-bottom: 8px;"><span style="background: var(--bg-card-hover); padding: 6px 10px; border-radius: 10px; display: inline-block; color: var(--accent-cyan);">Generating...</span></div>`;
+    chatBox.scrollTop = chatBox.scrollHeight;
+
+    const systemPrompt = `You are an AI study assistant for QuizCraft Pro. 
+If the user asks you to create or generate a quiz on a topic, respond ONLY with a raw valid JSON array of question objects without markdown formatting or backticks. 
+Each question object in the array must follow this schema:
+[
+  {
+    "type": "mc" or "tf",
+    "question": "question string",
+    "options": ["Option A", "Option B", "Option C", "Option D"] (only if type is "mc"),
+    "answer": integer index 0-3 for mc OR "True"/"False" string for tf,
+    "explanation": "brief explanation"
+  }
+]
+If the user is asking a general study question, answer it concisely in plain text.`;
+
+    try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{
+                    parts: [{ text: `${systemPrompt}\n\nUser request: ${userText}` }]
+                }]
+            })
+        });
+
+        const data = await response.json();
+        document.getElementById(loadingId).remove();
+
+        if (data.candidates && data.candidates[0].content.parts[0].text) {
+            let aiReply = data.candidates[0].content.parts[0].text.trim();
+            
+            if (aiReply.startsWith('```json')) aiReply = aiReply.replace(/^```json/, '').replace(/```$/, '').trim();
+            if (aiReply.startsWith('```')) aiReply = aiReply.replace(/^```/, '').replace(/```$/, '').trim();
+
+            chatBox.innerHTML += `<div style="margin-bottom: 8px;"><span style="background: var(--bg-card-hover); padding: 8px 12px; border-radius: 10px; display: inline-block; white-space: pre-wrap; font-family: monospace;">${aiReply}</span></div>`;
+        } else {
+            chatBox.innerHTML += `<div style="margin-bottom: 8px; color: var(--danger);">Error generating response. Check API key.</div>`;
+        }
+    } catch (error) {
+        document.getElementById(loadingId).remove();
+        chatBox.innerHTML += `<div style="margin-bottom: 8px; color: var(--danger);">Network error. Try again.</div>`;
+    }
+
+    chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+// INITIALIZATION
 if (currentUser && accounts[currentUser]) {
     initUserSession();
 } else {
