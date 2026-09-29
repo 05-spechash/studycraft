@@ -7,7 +7,11 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Open+Dyslexic&display=swap" rel="stylesheet">
+    
+    <!-- External Libraries for PDF & PPTX Unpacking -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
     <style>
         :root {
             --bg-main: #0b1329;
@@ -202,14 +206,6 @@
             text-align: left;
         }
 
-        .confidence-box {
-            background: #0f172a;
-            padding: 12px;
-            border-radius: var(--radius-md);
-            margin-top: 12px;
-            border: 1px dashed var(--border-color);
-        }
-
         .stat-circle {
             width: 120px;
             height: 120px;
@@ -325,7 +321,6 @@
     <!-- MAIN DASHBOARD -->
     <div id="screen-dashboard" class="dashboard-layout hidden">
         <aside>
-            <!-- FLASHCARDS HUB FOLDER -->
             <div class="special-folder-btn" id="flashcard-folder-btn" onclick="selectFolder('__FLASHCARDS__')">
                 <span>🎴 Flashcard Decks</span>
                 <span class="badge badge-purple" id="flashcard-count-badge">0</span>
@@ -367,23 +362,11 @@
             </div>
             <div style="display: flex; gap: 10px; align-items: center;">
                 <div id="timer-display" class="timer-badge hidden">⏳ 15:00</div>
-                <span id="quiz-adaptive-status" style="color: var(--accent-cyan); font-weight: 700; font-size: 0.85rem;">Mode: Standard</span>
             </div>
         </div>
 
         <h3 id="quiz-question-text" style="margin-bottom: 18px;">Question text</h3>
-
         <div id="quiz-options-container" style="display: flex; flex-direction: column; gap: 10px;"></div>
-
-        <div id="confidence-step" class="confidence-box hidden">
-            <p style="font-size: 0.85rem; margin-bottom: 8px; color: var(--accent-cyan); text-align: center;">How confident are you in this answer?</p>
-            <div style="display: flex; gap: 8px;">
-                <button class="btn btn-secondary" style="flex:1; justify-content: center;" onclick="setConfidence('Guess')">🤔 Guess</button>
-                <button class="btn btn-secondary" style="flex:1; justify-content: center;" onclick="setConfidence('Unsure')">😐 Unsure</button>
-                <button class="btn btn-secondary" style="flex:1; justify-content: center;" onclick="setConfidence('Certain')">🎯 Certain</button>
-            </div>
-        </div>
-
         <div id="quiz-feedback" class="source-box hidden" style="margin-top: 16px; border-color: var(--success);"></div>
 
         <div style="text-align: right; margin-top: 20px;">
@@ -452,11 +435,11 @@
             <label>Title</label>
             <input type="text" id="notes-title" class="form-control" placeholder="e.g., Biology Chapter 4">
             
-            <label>Upload File (.pdf, .ppt, .pptx, .txt)</label>
-            <input type="file" id="file-upload-input" accept=".pdf,.ppt,.pptx,.txt" class="form-control" onchange="handleFileSelect(event)">
+            <label>Upload File (.pdf, .pptx, .txt)</label>
+            <input type="file" id="file-upload-input" accept=".pdf,.pptx,.txt" class="form-control" onchange="handleFileSelect(event)">
 
-            <label>Or Paste Raw Notes / Presentation Text</label>
-            <textarea id="notes-text" class="form-control" style="height: 140px;" placeholder="Paste text here..."></textarea>
+            <label>Extracted Presentation Text</label>
+            <textarea id="notes-text" class="form-control" style="height: 160px;" placeholder="File content will appear here..."></textarea>
         </div>
         
         <div style="display: flex; gap: 10px;">
@@ -488,7 +471,7 @@ if (window.pdfjsLib) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 }
 
-// USER AUTH & LOCAL STORAGE SYSTEM
+// ACCOUNT & DATA MANAGEMENT
 let accounts = JSON.parse(localStorage.getItem('qc_accounts')) || {};
 let currentUser = localStorage.getItem('qc_current_user') || null;
 
@@ -504,17 +487,13 @@ let currentFolder = 'All';
 let activeQuiz = null;
 let activeQIndex = 0;
 let selectedOption = null;
-let selectedConfidence = null;
-let streakCounter = 0;
 let correctAnswersCount = 0;
 let sessionXpEarned = 0;
 
-// TIMED EXAM MODE VARIABLES
 let isTimedMode = false;
 let examTimerInterval = null;
 let examTimeRemaining = 0;
 
-// FLASHCARD GAMEPLAY VARIABLES
 let activeFcDeck = null;
 let activeFcIndex = 0;
 
@@ -572,7 +551,6 @@ function initUserSession() {
     loadUserData();
     document.getElementById('user-display-name').innerText = `👤 ${currentUser}`;
     document.getElementById('logout-btn').style.display = 'inline-flex';
-    checkSharedURL();
     showScreen('screen-dashboard');
 }
 
@@ -674,10 +652,7 @@ function renderDashboard() {
                             <p style="color: var(--text-muted); font-size: 0.8rem;">${q.questions.length} Items</p>
                         </div>
                         <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 14px;">
-                            <div style="display: flex; gap: 6px;">
-                                <button class="btn" style="flex: 1;" onclick="startQuiz(${realIndex}, false)">Play Normal</button>
-                                <button class="btn btn-secondary" onclick="shareQuiz(${realIndex})">🔗</button>
-                            </div>
+                            <button class="btn" style="width: 100%; justify-content: center;" onclick="startQuiz(${realIndex}, false)">Play Quiz</button>
                             <button class="btn btn-secondary" style="width: 100%; justify-content: center; font-size: 0.8rem; color: #fca5a5;" onclick="startQuiz(${realIndex}, true)">⏱️ Timed Exam Mode</button>
                         </div>
                     </div>
@@ -718,11 +693,165 @@ function populateSelect(id) {
     userFolders.forEach(f => select.innerHTML += `<option value="${f}">${f}</option>`);
 }
 
-// TIMED EXAM & QUIZ LOGIC
+// UNPACKING POWERPOINT, PDF, AND TEXT FILES
+async function handleFileSelect(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const fileExt = file.name.split('.').pop().toLowerCase();
+    const textArea = document.getElementById('notes-text');
+    textArea.value = "Extracting text, please wait...";
+
+    if (fileExt === 'pptx') {
+        try {
+            const zip = await JSZip.loadAsync(file);
+            let extractedSlidesText = [];
+
+            // Find all slide XML files inside ppt/slides/
+            const slideFiles = Object.keys(zip.files).filter(filename => filename.startsWith('ppt/slides/slide'));
+
+            for (let slidePath of slideFiles) {
+                const xmlContent = await zip.files[slidePath].async('string');
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(xmlContent, 'text/xml');
+                
+                // Extract plain text from slide text elements (<a:t>)
+                const textNodes = xmlDoc.getElementsByTagName('a:t');
+                let slideText = '';
+                for (let node of textNodes) {
+                    slideText += node.textContent + ' ';
+                }
+                if (slideText.trim().length > 0) {
+                    extractedSlidesText.push(slideText.trim());
+                }
+            }
+
+            textArea.value = extractedSlidesText.join('\n\n');
+        } catch (err) {
+            alert("Error reading PPTX file. Try saving as PDF or plain text.");
+            textArea.value = "";
+        }
+    } 
+    else if (fileExt === 'pdf') {
+        const fileReader = new FileReader();
+        fileReader.onload = async function() {
+            const typedarray = new Uint8Array(this.result);
+            const pdf = await pdfjsLib.getDocument(typedarray).promise;
+            let text = '';
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const content = await page.getTextContent();
+                text += content.items.map(item => item.str).join(' ') + '\n';
+            }
+            textArea.value = text;
+        };
+        fileReader.readAsArrayBuffer(file);
+    } 
+    else {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            textArea.value = e.target.result;
+        };
+        reader.readAsText(file);
+    }
+}
+
+// FLASHCARD & QUIZ GENERATOR FROM PARSED SLIDES
+function generateFromNotes() {
+    const title = document.getElementById('notes-title').value || 'Uploaded Presentation';
+    const folder = document.getElementById('notes-folder-select').value;
+    const text = document.getElementById('notes-text').value;
+
+    if (!text.trim() || text.startsWith("Extracting")) return alert('Please wait for file extraction to finish or enter notes manually.');
+
+    // Break presentation down into logical slide paragraphs or sentences
+    const blocks = text.split(/\n\s*\n/).filter(b => b.trim().length > 10);
+    let generatedQuestions = [];
+    let generatedFlashcards = [];
+
+    blocks.forEach((block, index) => {
+        const cleanBlock = block.replace(/\s+/g, ' ').trim();
+
+        // 1. Check for standard definitions ("Term is Answer")
+        if (cleanBlock.includes(' is ') || cleanBlock.includes(' are ')) {
+            const parts = cleanBlock.split(/ is | are /);
+            const frontTerm = parts[0].trim();
+            const backDef = parts.slice(1).join(' ').trim();
+
+            if (frontTerm.length < 60 && backDef.length > 5) {
+                generatedFlashcards.push({ front: frontTerm, back: backDef });
+                generatedQuestions.push({
+                    type: 'mc',
+                    question: `What is ${frontTerm}?`,
+                    options: [backDef, 'An unrelated module.', 'A legacy configuration.', 'None of the above.'],
+                    answer: 0,
+                    explanation: cleanBlock
+                });
+                return;
+            }
+        }
+
+        // 2. Default: Sentence-level extraction for slide points
+        const words = cleanBlock.split(' ');
+        if (words.length > 4) {
+            const frontHeader = words.slice(0, 4).join(' ') + '...';
+            generatedFlashcards.push({ front: frontHeader, back: cleanBlock });
+            generatedQuestions.push({
+                type: 'tf',
+                question: `True or False: ${cleanBlock}`,
+                options: ['True', 'False'],
+                answer: 'True',
+                explanation: cleanBlock
+            });
+        }
+    });
+
+    if (generatedFlashcards.length === 0) {
+        alert("Could not automatically parse flashcard structures. Created a summary card.");
+        generatedFlashcards.push({ front: title, back: text.substring(0, 200) + '...' });
+    }
+
+    userQuizzes.push({ title: title + ' Quiz', category: folder, questions: generatedQuestions });
+    userFlashcards.push({ title: title + ' Flashcards', category: folder, cards: generatedFlashcards });
+    
+    saveUserData();
+    showScreen('screen-dashboard');
+}
+
+// GAMEPLAY & PLAYERS
+function startFlashcardDeck(idx) {
+    activeFcDeck = userFlashcards[idx];
+    activeFcIndex = 0;
+    showScreen('screen-flashcard-player');
+    renderFlashcard();
+}
+
+function renderFlashcard() {
+    const card = activeFcDeck.cards[activeFcIndex];
+    document.getElementById('flashcard-card').classList.remove('flipped');
+    document.getElementById('fc-progress').innerText = `${activeFcIndex + 1} / ${activeFcDeck.cards.length}`;
+    document.getElementById('fc-front-text').innerText = card.front;
+    document.getElementById('fc-back-text').innerText = card.back;
+}
+
+function flipFlashcard() {
+    document.getElementById('flashcard-card').classList.toggle('flipped');
+}
+
+function rateFlashcard(gotIt) {
+    if (gotIt) addXP(10);
+    activeFcIndex++;
+    if (activeFcIndex < activeFcDeck.cards.length) {
+        renderFlashcard();
+    } else {
+        alert('🎉 Deck Completed! Great revision session.');
+        showScreen('screen-dashboard');
+    }
+}
+
 function startQuiz(idx, timedMode = false) {
     activeQuiz = userQuizzes[idx];
     activeQIndex = 0;
-    streakCounter = 0;
     correctAnswersCount = 0;
     sessionXpEarned = 0;
     isTimedMode = timedMode;
@@ -765,12 +894,10 @@ function updateTimerDisplay() {
 function renderQuizQuestion() {
     const q = activeQuiz.questions[activeQIndex];
     document.getElementById('quiz-question-text').innerText = `${activeQIndex + 1}. ${q.question}`;
-    document.getElementById('quiz-adaptive-status').innerText = streakCounter > 2 ? '🔥 Adaptive Boost Enabled' : 'Mode: Standard';
     
     const container = document.getElementById('quiz-options-container');
     container.innerHTML = '';
     document.getElementById('quiz-feedback').classList.add('hidden');
-    document.getElementById('confidence-step').classList.add('hidden');
     document.getElementById('quiz-next-btn').style.display = 'none';
 
     const opts = q.type === 'tf' ? ['True', 'False'] : q.options;
@@ -785,53 +912,26 @@ function renderQuizQuestion() {
 }
 
 function selectAnswerOption(ans, btn) {
-    selectedOption = { ans, btn };
-    document.querySelectorAll('.option-btn-item').forEach(b => b.style.borderColor = 'var(--border-color)');
-    btn.style.borderColor = 'var(--accent-cyan)';
-
-    if (isTimedMode) {
-        document.getElementById('quiz-next-btn').style.display = 'inline-flex';
-    } else {
-        document.getElementById('confidence-step').classList.remove('hidden');
-    }
-}
-
-function setConfidence(level) {
-    selectedConfidence = level;
-    document.getElementById('confidence-step').classList.add('hidden');
-    evaluateSelectedAnswer();
-}
-
-function evaluateSelectedAnswer() {
     const q = activeQuiz.questions[activeQIndex];
-    const isCorrect = q.type === 'tf' ? (selectedOption.ans === q.answer) : (selectedOption.ans === q.answer);
+    const isCorrect = q.type === 'tf' ? (ans === q.answer) : (ans === q.answer);
     
+    document.querySelectorAll('.option-btn-item').forEach(b => b.style.borderColor = 'var(--border-color)');
+
     if (isCorrect) {
-        selectedOption.btn.style.background = 'var(--success)';
-        streakCounter++;
+        btn.style.background = 'var(--success)';
         correctAnswersCount++;
-        addXP(selectedConfidence === 'Certain' ? 25 : 15);
+        addXP(15);
     } else {
-        selectedOption.btn.style.background = 'var(--danger)';
-        streakCounter = 0;
+        btn.style.background = 'var(--danger)';
     }
 
     const feedback = document.getElementById('quiz-feedback');
     feedback.classList.remove('hidden');
-    feedback.innerText = `[Confidence: ${selectedConfidence}] Explanation: ${q.explanation || 'No explanation provided.'}`;
+    feedback.innerText = `Explanation: ${q.explanation || 'No explanation provided.'}`;
     document.getElementById('quiz-next-btn').style.display = 'inline-flex';
 }
 
 function nextQuizQuestion() {
-    if (isTimedMode) {
-        const q = activeQuiz.questions[activeQIndex];
-        const isCorrect = q.type === 'tf' ? (selectedOption.ans === q.answer) : (selectedOption.ans === q.answer);
-        if (isCorrect) {
-            correctAnswersCount++;
-            addXP(20);
-        }
-    }
-
     activeQIndex++;
     if (activeQIndex < activeQuiz.questions.length) {
         renderQuizQuestion();
@@ -853,143 +953,6 @@ function finishQuizSession() {
     showScreen('screen-results');
 }
 
-// FLASHCARD SYSTEM
-function startFlashcardDeck(idx) {
-    activeFcDeck = userFlashcards[idx];
-    activeFcIndex = 0;
-    showScreen('screen-flashcard-player');
-    renderFlashcard();
-}
-
-function renderFlashcard() {
-    const card = activeFcDeck.cards[activeFcIndex];
-    document.getElementById('flashcard-card').classList.remove('flipped');
-    document.getElementById('fc-progress').innerText = `${activeFcIndex + 1} / ${activeFcDeck.cards.length}`;
-    document.getElementById('fc-front-text').innerText = card.front;
-    document.getElementById('fc-back-text').innerText = card.back;
-}
-
-function flipFlashcard() {
-    document.getElementById('flashcard-card').classList.toggle('flipped');
-}
-
-function rateFlashcard(gotIt) {
-    if (gotIt) addXP(10);
-    activeFcIndex++;
-    if (activeFcIndex < activeFcDeck.cards.length) {
-        renderFlashcard();
-    } else {
-        alert('🎉 Deck Completed! Great revision session.');
-        showScreen('screen-dashboard');
-    }
-}
-
-// CLEAN FILE UPLOADER (PDF, PPT, PPTX, TXT)
-let extractedFileText = '';
-
-async function handleFileSelect(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    const fileExt = file.name.split('.').pop().toLowerCase();
-    
-    if (fileExt === 'pdf') {
-        const fileReader = new FileReader();
-        fileReader.onload = async function() {
-            const typedarray = new Uint8Array(this.result);
-            const pdf = await pdfjsLib.getDocument(typedarray).promise;
-            let text = '';
-            for (let i = 1; i <= pdf.numPages; i++) {
-                const page = await pdf.getPage(i);
-                const content = await page.getTextContent();
-                text += content.items.map(item => item.str).join(' ') + '\n';
-            }
-            extractedFileText = text;
-            document.getElementById('notes-text').value = text;
-        };
-        fileReader.readAsArrayBuffer(file);
-    } 
-    else if (fileExt === 'ppt' || fileExt === 'pptx') {
-        // Read presentation binary and filter XML/ZIP characters
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const rawContent = e.target.result;
-            let cleanText = rawContent
-                .replace(/<[^>]+>/g, ' ')                  // Strip XML tags
-                .replace(/[\x00-\x1F\x7F-\x9F]/g, ' ')      // Strip control chars
-                .replace(/PK[\s\S]*?\[Content_Types\]\.xml/g, '') // Strip zip signature clutter
-                .replace(/\s+/g, ' ')                       // Collapse multiple spaces
-                .trim();
-
-            const readableWords = cleanText.match(/[a-zA-Z0-9.,?!'"]{3,}/g) || [];
-            extractedFileText = readableWords.join(' ');
-            document.getElementById('notes-text').value = extractedFileText;
-        };
-        reader.readAsBinaryString(file);
-    } 
-    else {
-        // Plain text (.txt)
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            extractedFileText = e.target.result;
-            document.getElementById('notes-text').value = e.target.result;
-        };
-        reader.readAsText(file);
-    }
-}
-
-function generateFromNotes() {
-    const title = document.getElementById('notes-title').value || 'Uploaded Deck';
-    const folder = document.getElementById('notes-folder-select').value;
-    const text = document.getElementById('notes-text').value;
-
-    if (!text.trim()) return alert('Please enter or upload study notes first.');
-
-    const sentences = text.split(/(?<=[.?!])\s+/).filter(s => s.length > 15);
-    let generatedQuestions = [];
-    let generatedFlashcards = [];
-
-    sentences.forEach(s => {
-        if (s.includes(' is ') || s.includes(' are ')) {
-            const parts = s.split(/ is | are /);
-            const frontTerm = parts[0].trim();
-            const backDef = parts[1].trim();
-
-            generatedQuestions.push({
-                type: 'mc',
-                question: `What is ${frontTerm}?`,
-                options: [backDef, 'An unrelated concept.', 'An opposing force.', 'None of these.'],
-                answer: 0,
-                explanation: s
-            });
-
-            generatedFlashcards.push({
-                front: frontTerm,
-                back: backDef
-            });
-        }
-    });
-
-    if (generatedQuestions.length === 0) {
-        generatedQuestions.push({
-            type: 'tf',
-            question: text.substring(0, 80) + '...?',
-            answer: 'True',
-            explanation: 'Generated from notes summary.'
-        });
-        generatedFlashcards.push({
-            front: title,
-            back: text.substring(0, 150) + '...'
-        });
-    }
-
-    userQuizzes.push({ title: title + ' Quiz', category: folder, questions: generatedQuestions });
-    userFlashcards.push({ title: title + ' Flashcards', category: folder, cards: generatedFlashcards });
-    
-    saveUserData();
-    showScreen('screen-dashboard');
-}
-
 function importJsonQuiz() {
     const title = document.getElementById('json-title').value || 'Imported Quiz';
     const folder = document.getElementById('json-folder-select').value;
@@ -1001,27 +964,6 @@ function importJsonQuiz() {
         saveUserData();
         showScreen('screen-dashboard');
     } catch(e) { alert('Invalid JSON structure.'); }
-}
-
-function shareQuiz(idx) {
-    const q = userQuizzes[idx];
-    const encoded = btoa(JSON.stringify(q));
-    const shareUrl = `${window.location.origin}${window.location.pathname}#${encoded}`;
-    navigator.clipboard.writeText(shareUrl);
-    alert('Public share link copied to clipboard!');
-}
-
-function checkSharedURL() {
-    const hash = window.location.hash.substring(1);
-    if (hash && currentUser) {
-        try {
-            const decoded = JSON.parse(atob(hash));
-            userQuizzes.push(decoded);
-            saveUserData();
-            alert(`Imported shared quiz: "${decoded.title}"!`);
-            window.location.hash = '';
-        } catch(e) { console.error('Invalid link.'); }
-    }
 }
 
 function toggleDyslexicFont() { document.body.classList.toggle('dyslexic-font'); }
