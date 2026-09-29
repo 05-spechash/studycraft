@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>StudyCraft AI — Interactive Learning Edition</title>
+    <title>StudyCraft AI — Complete Learning Ecosystem</title>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Open+Dyslexic&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -27,6 +27,7 @@
 
         .app-container { max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
 
+        /* HEADER & STATS */
         header {
             background: var(--card-bg);
             padding: 16px 24px;
@@ -42,16 +43,20 @@
         .badge-cyan { color: var(--accent-cyan); border-color: var(--accent-cyan); }
         .badge-purple { color: var(--accent-purple); border-color: var(--accent-purple); }
 
-        nav { display: flex; gap: 10px; border-bottom: 1px solid var(--border); padding-bottom: 10px; flex-wrap: wrap; }
-        .tab-btn { background: transparent; color: var(--text-muted); border: none; padding: 10px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; }
+        /* NAVIGATION TABS */
+        nav { display: flex; gap: 8px; border-bottom: 1px solid var(--border); padding-bottom: 10px; flex-wrap: wrap; }
+        .tab-btn { background: transparent; color: var(--text-muted); border: none; padding: 10px 14px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 0.9rem; }
         .tab-btn.active { background: var(--accent-blue); color: white; }
 
+        /* PANEL & GRID LAYOUTS */
         .panel { display: none; background: var(--card-bg); border-radius: 12px; border: 1px solid var(--border); padding: 24px; }
         .panel.active { display: block; }
 
         .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        @media(max-width: 768px) { .grid-2 { grid-template-columns: 1fr; } }
+        .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+        @media(max-width: 768px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
 
+        /* FORM CONTROLS */
         label { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); display: block; margin: 10px 0 4px; }
         input, select, textarea { width: 100%; background: #0f172a; border: 1px solid var(--border); color: white; padding: 10px; border-radius: 8px; }
         button.btn { background: var(--accent-blue); color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 700; cursor: pointer; margin-top: 10px; }
@@ -59,59 +64,40 @@
         .btn-pink { background: var(--accent-pink); }
         .btn-green { background: var(--accent-green); color: black; }
 
-        /* MODE 1: CLOZE DELETION STYLES */
-        .cloze-blank {
-            background: var(--accent-purple);
-            color: transparent;
-            padding: 2px 10px;
-            border-radius: 4px;
-            cursor: pointer;
-            user-select: none;
-            transition: all 0.2s ease;
-            font-weight: bold;
-        }
-        .cloze-blank.revealed {
-            background: var(--accent-cyan);
-            color: black;
+        /* FLASHCARD PLAYER */
+        .flashcard {
+            background: #0f172a; border: 2px solid var(--accent-purple); border-radius: 12px;
+            height: 200px; display: flex; align-items: center; justify-content: center;
+            text-align: center; padding: 20px; cursor: pointer; font-size: 1.2rem; font-weight: 600;
         }
 
-        /* MODE 2: MIND MAP CANVAS */
+        /* HEATMAP */
+        .heatmap { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin-top: 10px; }
+        .day-box { background: #0f172a; border: 1px solid var(--border); height: 35px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; }
+        .day-box.active { background: var(--accent-green); color: black; font-weight: bold; }
+
+        /* CLOZE DELETION */
+        .cloze-blank {
+            background: var(--accent-purple); color: transparent; padding: 2px 10px;
+            border-radius: 4px; cursor: pointer; user-select: none; transition: all 0.2s ease; font-weight: bold;
+        }
+        .cloze-blank.revealed { background: var(--accent-cyan); color: black; }
+
+        /* CONCEPT MIND MAP CANVAS */
         .mindmap-container {
-            width: 100%;
-            height: 320px;
-            background: #0f172a;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            position: relative;
-            overflow: hidden;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            width: 100%; height: 320px; background: #0f172a; border: 1px solid var(--border);
+            border-radius: 8px; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center;
         }
         .node {
-            position: absolute;
-            padding: 10px 16px;
-            border-radius: 20px;
-            background: var(--card-bg);
-            border: 2px solid var(--accent-blue);
-            font-size: 0.85rem;
-            font-weight: 700;
-            color: white;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-            cursor: pointer;
+            position: absolute; padding: 10px 16px; border-radius: 20px; background: var(--card-bg);
+            border: 2px solid var(--accent-blue); font-size: 0.85rem; font-weight: 700; color: white;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3); cursor: pointer;
         }
         .node-root { border-color: var(--accent-pink); background: #3b0764; }
         .node-child { border-color: var(--accent-cyan); }
 
-        /* MODE 3: AUDIO CARD STYLES */
-        .audio-wave {
-            display: inline-block;
-            width: 12px;
-            height: 12px;
-            background: var(--accent-pink);
-            border-radius: 50%;
-            margin-left: 8px;
-        }
+        /* AUDIO PULSE INDICATOR */
+        .audio-wave { display: inline-block; width: 12px; height: 12px; background: var(--accent-pink); border-radius: 50%; margin-left: 8px; }
         .listening { animation: pulse 1s infinite; }
         @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.5); } 100% { transform: scale(1); } }
     </style>
@@ -119,10 +105,11 @@
 <body>
 
 <div class="app-container">
+    <!-- HEADER & GAMIFICATION -->
     <header>
         <div>
             <h2 style="color: var(--accent-cyan);">⚡ StudyCraft AI</h2>
-            <p style="font-size: 0.8rem; color: var(--text-muted);">Interactive Learning Modes Enabled</p>
+            <p id="user-goal-display" style="font-size: 0.8rem; color: var(--text-muted);">Target: 85% in Biology | Exam: 12 Days</p>
         </div>
         <div class="user-stats">
             <span class="badge badge-cyan" id="xp-display">⚡ 120 XP</span>
@@ -131,84 +118,184 @@
         </div>
     </header>
 
+    <!-- NAVIGATION TABS -->
     <nav>
-        <button class="tab-btn active" onclick="showTab('tab-cloze')">1. Cloze Deletion Editor</button>
-        <button class="tab-btn" onclick="showTab('tab-audio')">2. Speech & Voice Mode</button>
-        <button class="tab-btn" onclick="showTab('tab-mindmap')">3. Concept Mind Map</button>
+        <button class="tab-btn active" onclick="showTab('tab-goals')">Goals & Profile</button>
+        <button class="tab-btn" onclick="showTab('tab-content')">Content & Parser</button>
+        <button class="tab-btn" onclick="showTab('tab-tools')">Flashcards & Timer</button>
+        <button class="tab-btn" onclick="showTab('tab-cloze')">Cloze Recall</button>
+        <button class="tab-btn" onclick="showTab('tab-audio')">Voice Mode</button>
+        <button class="tab-btn" onclick="showTab('tab-mindmap')">Concept Mind Map</button>
+        <button class="tab-btn" onclick="showTab('tab-analytics')">Analytics</button>
+        <button class="tab-btn" onclick="showTab('tab-community')">Community</button>
     </nav>
 
-    <!-- INTERACTIVE MODE 1: CLOZE DELETION -->
-    <section id="tab-cloze" class="panel active">
-        <h3>1. Active Recall — Cloze Deletion Mode</h3>
-        <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 14px;">
-            Type or paste notes below. Highlight text and click <b>"Hide Selected Words"</b> to make interactive blanks for self-testing.
-        </p>
-
+    <!-- TAB 1: GOALS & SETTINGS -->
+    <section id="tab-goals" class="panel active">
+        <h3>1. Goals & Adaptive Plan</h3>
         <div class="grid-2">
             <div>
-                <label>Input Notes</label>
-                <textarea id="cloze-input" rows="8">Photosynthesis takes place inside the chloroplasts of plant cells. The green pigment called chlorophyll absorbs sunlight to produce glucose and oxygen.</textarea>
+                <label>Target Subject</label>
+                <input type="text" id="goal-subject" value="Biology">
+                
+                <label>Target Score (%)</label>
+                <input type="number" id="goal-score" value="85">
+
+                <label>Exam Deadline</label>
+                <input type="date" id="goal-date">
+
+                <button class="btn" onclick="saveGoals()">Save Goals</button>
+            </div>
+            <div>
+                <h4>Settings & Preferences</h4>
+                <label><input type="checkbox" checked> Spaced Repetition Nudges</label><br>
+                <label><input type="checkbox" checked> Streak-Protection Reminders</label><br>
+                <label><input type="checkbox" checked> Ambient Background Sounds</label>
+            </div>
+        </div>
+    </section>
+
+    <!-- TAB 2: CONTENT MANAGEMENT -->
+    <section id="tab-content" class="panel">
+        <h3>2. Import Study Material</h3>
+        <label>Paste Raw Notes or Document Text</label>
+        <textarea id="raw-notes" rows="6" placeholder="Mitochondria produces ATP energy. Chloroplasts handle photosynthesis in plant cells."></textarea>
+        <button class="btn" onclick="processNotes()">Parse into Flashcards</button>
+        
+        <h4 style="margin-top: 20px;">Resource Library</h4>
+        <div id="library-list" style="margin-top: 10px; color: var(--text-muted); font-size: 0.9rem;">No decks generated yet.</div>
+    </section>
+
+    <!-- TAB 3: STUDY TOOLS (FLASHCARDS & TIMER) -->
+    <section id="tab-tools" class="panel">
+        <h3>3. Flashcards & Pomodoro Timer</h3>
+        <div class="grid-2">
+            <div>
+                <h4>🎴 Spaced Repetition Deck</h4>
+                <div class="flashcard" id="card-display" onclick="flipCard()" style="margin-top: 10px;">
+                    Click "Parse into Flashcards" in Content tab to begin!
+                </div>
+                <div style="display: flex; gap: 10px; margin-top: 10px;">
+                    <button class="btn" style="background: #ef4444; flex: 1;" onclick="rateCard(1)">Hard</button>
+                    <button class="btn" style="background: var(--accent-green); flex: 1; color: black;" onclick="rateCard(3)">Easy (+15 XP)</button>
+                </div>
+            </div>
+
+            <div>
+                <h4>⏱️ Focus Timer</h4>
+                <div style="text-align: center; font-size: 3rem; font-weight: 800; margin: 20px 0;" id="timer-display">25:00</div>
+                <div style="display: flex; justify-content: center; gap: 10px;">
+                    <button class="btn" onclick="toggleTimer()">Start / Pause</button>
+                    <button class="btn" style="background: var(--border);" onclick="resetTimer()">Reset</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- TAB 4: INTERACTIVE MODE — CLOZE DELETION -->
+    <section id="tab-cloze" class="panel">
+        <h3>4. Active Recall — Cloze Deletion Editor</h3>
+        <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 14px;">Highlight text and click <b>"Hide Selected Words"</b> to generate interactive fill-in-the-blank cards.</p>
+        <div class="grid-2">
+            <div>
+                <label>Input Text</label>
+                <textarea id="cloze-input" rows="8">Photosynthesis takes place inside the chloroplasts of plant cells. Chlorophyll absorbs sunlight to produce glucose.</textarea>
                 <button class="btn btn-pink" onclick="createCloze()">Hide Selected Words</button>
             </div>
             <div>
                 <label>Interactive Test View (Click blanks to reveal)</label>
                 <div id="cloze-output" style="background: #0f172a; padding: 16px; border-radius: 8px; min-height: 180px; border: 1px solid var(--border); line-height: 1.8;">
-                    Click "Hide Selected Words" to create your first interactive note!
+                    Highlight text on the left to start!
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- INTERACTIVE MODE 2: AUDIO & SPEECH RECOGNITION -->
+    <!-- TAB 5: INTERACTIVE MODE — VOICE & AUDIO -->
     <section id="tab-audio" class="panel">
-        <h3>2. Hands-Free Audio & Speech Recognition Mode</h3>
-        <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 14px;">
-            Listen to your prompts aloud, or speak your answers to test recall hands-free.
-        </p>
-
+        <h3>5. Hands-Free Voice Recitation</h3>
         <div class="grid-2">
             <div style="background: #0f172a; padding: 20px; border-radius: 8px; border: 1px solid var(--border);">
-                <h4>🔊 Text-to-Speech Engine</h4>
-                <p id="tts-prompt" style="font-size: 1.1rem; font-weight: 600; margin: 16px 0;">
-                    What is the primary function of the Mitochondria?
-                </p>
+                <h4>🔊 Text-to-Speech Prompt</h4>
+                <p id="tts-prompt" style="font-size: 1.1rem; font-weight: 600; margin: 16px 0;">What is the primary function of the Mitochondria?</p>
                 <button class="btn" onclick="speakPrompt()">▶ Read Question Aloud</button>
             </div>
 
             <div style="background: #0f172a; padding: 20px; border-radius: 8px; border: 1px solid var(--border);">
-                <h4>🎙️ Voice Recitation Test <span id="mic-indicator" class="audio-wave" style="display:none;"></span></h4>
+                <h4>🎙️ Voice Test <span id="mic-indicator" class="audio-wave" style="display:none;"></span></h4>
                 <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 10px;">Click record and speak your answer:</p>
                 <button class="btn btn-green" onclick="startSpeechRecognition()">🎙️ Start Speaking</button>
-                <div id="speech-transcript" style="margin-top: 14px; font-style: italic; color: var(--accent-cyan); font-size: 0.9rem;">
-                    Speech output will appear here...
-                </div>
+                <div id="speech-transcript" style="margin-top: 14px; font-style: italic; color: var(--accent-cyan); font-size: 0.9rem;">Speech output will appear here...</div>
             </div>
         </div>
     </section>
 
-    <!-- INTERACTIVE MODE 3: CONCEPT MIND MAP -->
+    <!-- TAB 6: INTERACTIVE MODE — CONCEPT MIND MAP -->
     <section id="tab-mindmap" class="panel">
-        <h3>3. Interactive Concept Mind Map</h3>
-        <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 14px;">
-            Visualizes relationships between major topics and sub-topics automatically from structured text.
-        </p>
-
+        <h3>6. Interactive Concept Mind Map</h3>
         <div style="margin-bottom: 14px; display: flex; gap: 10px;">
             <input type="text" id="map-root-input" value="Cell Biology" style="max-width: 200px;" placeholder="Root Topic">
             <input type="text" id="map-child-input" value="Mitochondria, Chloroplast, Nucleus, Ribosome" placeholder="Subtopics (comma separated)">
             <button class="btn" onclick="generateMindMap()">Build Mind Map</button>
         </div>
+        <div class="mindmap-container" id="mindmap-canvas"></div>
+    </section>
 
-        <div class="mindmap-container" id="mindmap-canvas">
-            <!-- Nodes render here dynamically -->
+    <!-- TAB 7: PROGRESS & ANALYTICS -->
+    <section id="tab-analytics" class="panel">
+        <h3>7. Analytics & Mastery</h3>
+        <div class="grid-2">
+            <div>
+                <h4>7-Day Study Heatmap</h4>
+                <div class="heatmap">
+                    <div class="day-box active">M</div>
+                    <div class="day-box active">T</div>
+                    <div class="day-box active">W</div>
+                    <div class="day-box">T</div>
+                    <div class="day-box active">F</div>
+                    <div class="day-box">S</div>
+                    <div class="day-box">S</div>
+                </div>
+            </div>
+            <div>
+                <h4>Weak-Spot Inspector</h4>
+                <p style="font-size: 0.9rem; color: var(--text-muted); margin-top: 10px;">
+                    ⚠️ Weak Topic Identified: <b>Cellular Respiration</b><br>
+                    Retention Index: <b>42% Accuracy</b>
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- TAB 8: COMMUNITY -->
+    <section id="tab-community" class="panel">
+        <h3>8. Community Shared Decks</h3>
+        <div class="grid-3">
+            <div style="background: #0f172a; padding: 14px; border-radius: 8px; border: 1px solid var(--border);">
+                <h4>AP Bio Deck</h4>
+                <p style="font-size: 0.8rem; color: var(--text-muted);">By @AlexStudios</p>
+                <button class="btn" style="font-size: 0.75rem;">Import Deck</button>
+            </div>
+            <div style="background: #0f172a; padding: 14px; border-radius: 8px; border: 1px solid var(--border);">
+                <h4>Organic Chem Formulas</h4>
+                <p style="font-size: 0.8rem; color: var(--text-muted);">By @SarahK</p>
+                <button class="btn" style="font-size: 0.75rem;">Import Deck</button>
+            </div>
         </div>
     </section>
 </div>
 
 <script>
+    // GLOBAL STATE
     let xp = 120;
     let level = 2;
+    let flashcards = [];
+    let currentCardIndex = 0;
+    let showingFront = true;
+    let timerSeconds = 1500;
+    let timerInterval = null;
 
+    // TAB NAVIGATION
     function showTab(tabId) {
         document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -216,95 +303,151 @@
         event.target.classList.add('active');
     }
 
-    // MODE 1: CLOZE DELETION IMPLEMENTATION
+    // GOALS ENGINE
+    function saveGoals() {
+        const subject = document.getElementById('goal-subject').value;
+        const score = document.getElementById('goal-score').value;
+        document.getElementById('user-goal-display').innerText = `Target: ${score}% in ${subject} | Goal Active`;
+        alert("Adaptive plan saved!");
+    }
+
+    // PARSER & FLASHCARDS
+    function processNotes() {
+        const text = document.getElementById('raw-notes').value;
+        if (!text) return alert("Please enter text first!");
+        
+        const sentences = text.split('.').filter(s => s.trim().length > 5);
+        flashcards = sentences.map((s, idx) => ({
+            front: `Concept ${idx + 1}`,
+            back: s.trim()
+        }));
+
+        document.getElementById('library-list').innerText = `Loaded Deck: ${flashcards.length} Cards Generated.`;
+        currentCardIndex = 0;
+        updateCardDisplay();
+        alert("Flashcards created!");
+    }
+
+    function updateCardDisplay() {
+        const display = document.getElementById('card-display');
+        if (flashcards.length === 0) return;
+        const card = flashcards[currentCardIndex];
+        display.innerText = showingFront ? card.front : card.back;
+    }
+
+    function flipCard() {
+        showingFront = !showingFront;
+        updateCardDisplay();
+    }
+
+    function rateCard(quality) {
+        if (flashcards.length === 0) return;
+        if (quality === 3) addXP(15);
+        showingFront = true;
+        currentCardIndex = (currentCardIndex + 1) % flashcards.length;
+        updateCardDisplay();
+    }
+
+    // TIMER
+    function toggleTimer() {
+        if (timerInterval) {
+            clearInterval(timerInterval);
+            timerInterval = null;
+        } else {
+            timerInterval = setInterval(() => {
+                timerSeconds--;
+                let m = Math.floor(timerSeconds / 60);
+                let s = timerSeconds % 60;
+                document.getElementById('timer-display').innerText = `${m}:${s < 10 ? '0' : ''}${s}`;
+                if (timerSeconds <= 0) {
+                    clearInterval(timerInterval);
+                    addXP(50);
+                    alert("Pomodoro complete! +50 XP");
+                }
+            }, 1000);
+        }
+    }
+
+    function resetTimer() {
+        clearInterval(timerInterval);
+        timerInterval = null;
+        timerSeconds = 1500;
+        document.getElementById('timer-display').innerText = "25:00";
+    }
+
+    // CLOZE MODE
     function createCloze() {
         const input = document.getElementById('cloze-input');
         const start = input.selectionStart;
         const end = input.selectionEnd;
         const text = input.value;
 
-        if (start === end) {
-            alert("Please highlight a word or phrase in the text box first!");
-            return;
-        }
+        if (start === end) return alert("Highlight words to hide first!");
 
         const selectedText = text.substring(start, end);
         const before = text.substring(0, start);
         const after = text.substring(end);
 
-        const formatted = `${before}<span class="cloze-blank" onclick="revealCloze(this)">${selectedText}</span>${after}`;
-        document.getElementById('cloze-output').innerHTML = formatted;
+        document.getElementById('cloze-output').innerHTML = `${before}<span class="cloze-blank" onclick="revealCloze(this)">${selectedText}</span>${after}`;
     }
 
-    function revealCloze(element) {
-        element.classList.add('revealed');
+    function revealCloze(el) {
+        el.classList.add('revealed');
         addXP(5);
     }
 
-    // MODE 2: AUDIO TTS & STT IMPLEMENTATION
+    // VOICE MODE
     function speakPrompt() {
         const text = document.getElementById('tts-prompt').innerText;
         if ('speechSynthesis' in window) {
             const utterance = new SpeechSynthesisUtterance(text);
-            utterance.rate = 0.95;
             window.speechSynthesis.speak(utterance);
-        } else {
-            alert("Text-to-Speech is not supported in this browser.");
         }
     }
 
     function startSpeechRecognition() {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRecognition) {
-            alert("Speech recognition is not supported in this browser. Try Google Chrome.");
-            return;
-        }
+        if (!SpeechRecognition) return alert("Speech recognition not supported on this browser.");
 
         const recognition = new SpeechRecognition();
         const indicator = document.getElementById('mic-indicator');
         const transcriptDiv = document.getElementById('speech-transcript');
 
-        recognition.onstart = function() {
+        recognition.onstart = () => {
             indicator.style.display = 'inline-block';
             indicator.classList.add('listening');
-            transcriptDiv.innerText = "Listening... speak now.";
+            transcriptDiv.innerText = "Listening...";
         };
 
-        recognition.onspeechend = function() {
+        recognition.onspeechend = () => {
             indicator.style.display = 'none';
             recognition.stop();
         };
 
-        recognition.onresult = function(event) {
-            const transcript = event.results[0][0].transcript;
-            transcriptDiv.innerText = `You said: "${transcript}"`;
+        recognition.onresult = (e) => {
+            transcriptDiv.innerText = `You said: "${e.results[0][0].transcript}"`;
             addXP(10);
         };
 
         recognition.start();
     }
 
-    // MODE 3: CONCEPT MIND MAP IMPLEMENTATION
+    // MIND MAP
     function generateMindMap() {
         const canvas = document.getElementById('mindmap-canvas');
         canvas.innerHTML = '';
 
-        const rootText = document.getElementById('map-root-input').value || "Central Concept";
-        const childrenText = document.getElementById('map-child-input').value || "Topic A, Topic B";
-        const children = childrenText.split(',').map(c => c.trim()).filter(c => c.length > 0);
+        const rootText = document.getElementById('map-root-input').value || "Concept";
+        const children = (document.getElementById('map-child-input').value || "").split(',').map(c => c.trim()).filter(c => c);
 
-        // Render Central Node
         const rootNode = document.createElement('div');
         rootNode.className = 'node node-root';
         rootNode.innerText = rootText;
         canvas.appendChild(rootNode);
 
-        // Position Sub-nodes in a circle around central node
         const radius = 110;
-        const total = children.length;
-
         children.forEach((child, idx) => {
-            const angle = (idx / total) * (2 * Math.PI);
+            const angle = (idx / children.length) * (2 * Math.PI);
             const x = Math.round(radius * Math.cos(angle));
             const y = Math.round(radius * Math.sin(angle));
 
@@ -312,13 +455,11 @@
             childNode.className = 'node node-child';
             childNode.innerText = child;
             childNode.style.transform = `translate(${x}px, ${y}px)`;
-            childNode.onclick = () => {
-                alert(`Concept: ${child}\nLinked to parent topic: ${rootText}`);
-            };
             canvas.appendChild(childNode);
         });
     }
 
+    // GAMIFICATION & ACCESSIBILITY
     function addXP(amount) {
         xp += amount;
         level = Math.floor(xp / 100) + 1;
@@ -330,7 +471,7 @@
         document.body.classList.toggle('dyslexic');
     }
 
-    // Initialize Mind Map on load
+    // INIT
     generateMindMap();
 </script>
 </body>
