@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>StudyCraft AI — Complete Learning Ecosystem</title>
+    <title>StudyCraft AI — Enterprise Learning Ecosystem</title>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Open+Dyslexic&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <style>
         :root {
             --bg-dark: #0f172a;
@@ -14,6 +15,7 @@
             --accent-cyan: #06b6d4;
             --accent-green: #10b981;
             --accent-pink: #ec4899;
+            --accent-red: #ef4444;
             --text-main: #f8fafc;
             --text-muted: #94a3b8;
             --border: #334155;
@@ -27,7 +29,6 @@
 
         .app-container { max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
 
-        /* HEADER & STATS */
         header {
             background: var(--card-bg);
             padding: 16px 24px;
@@ -43,12 +44,10 @@
         .badge-cyan { color: var(--accent-cyan); border-color: var(--accent-cyan); }
         .badge-purple { color: var(--accent-purple); border-color: var(--accent-purple); }
 
-        /* NAVIGATION TABS */
         nav { display: flex; gap: 8px; border-bottom: 1px solid var(--border); padding-bottom: 10px; flex-wrap: wrap; }
         .tab-btn { background: transparent; color: var(--text-muted); border: none; padding: 10px 14px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 0.9rem; }
         .tab-btn.active { background: var(--accent-blue); color: white; }
 
-        /* PANEL & GRID LAYOUTS */
         .panel { display: none; background: var(--card-bg); border-radius: 12px; border: 1px solid var(--border); padding: 24px; }
         .panel.active { display: block; }
 
@@ -56,246 +55,205 @@
         .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
         @media(max-width: 768px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
 
-        /* FORM CONTROLS */
         label { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); display: block; margin: 10px 0 4px; }
         input, select, textarea { width: 100%; background: #0f172a; border: 1px solid var(--border); color: white; padding: 10px; border-radius: 8px; }
         button.btn { background: var(--accent-blue); color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 700; cursor: pointer; margin-top: 10px; }
         button.btn:hover { opacity: 0.9; }
         .btn-pink { background: var(--accent-pink); }
         .btn-green { background: var(--accent-green); color: black; }
+        .btn-danger { background: var(--accent-red); }
 
-        /* FLASHCARD PLAYER */
         .flashcard {
             background: #0f172a; border: 2px solid var(--accent-purple); border-radius: 12px;
             height: 200px; display: flex; align-items: center; justify-content: center;
             text-align: center; padding: 20px; cursor: pointer; font-size: 1.2rem; font-weight: 600;
         }
 
-        /* HEATMAP */
-        .heatmap { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin-top: 10px; }
-        .day-box { background: #0f172a; border: 1px solid var(--border); height: 35px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; }
-        .day-box.active { background: var(--accent-green); color: black; font-weight: bold; }
-
-        /* CLOZE DELETION */
-        .cloze-blank {
-            background: var(--accent-purple); color: transparent; padding: 2px 10px;
-            border-radius: 4px; cursor: pointer; user-select: none; transition: all 0.2s ease; font-weight: bold;
+        .quiz-option {
+            background: #0f172a; border: 1px solid var(--border); padding: 12px 16px;
+            border-radius: 8px; margin-top: 10px; cursor: pointer; font-weight: 600; transition: all 0.2s ease;
         }
-        .cloze-blank.revealed { background: var(--accent-cyan); color: black; }
+        .quiz-option:hover { border-color: var(--accent-blue); }
+        .quiz-option.correct { background: var(--accent-green); color: black; border-color: var(--accent-green); }
+        .quiz-option.wrong { background: var(--accent-red); color: white; border-color: var(--accent-red); }
 
-        /* CONCEPT MIND MAP CANVAS */
-        .mindmap-container {
-            width: 100%; height: 320px; background: #0f172a; border: 1px solid var(--border);
-            border-radius: 8px; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center;
+        .file-drop-zone {
+            border: 2px dashed var(--accent-blue); padding: 20px; border-radius: 8px;
+            text-align: center; background: #0f172a; margin-top: 8px; cursor: pointer;
         }
-        .node {
-            position: absolute; padding: 10px 16px; border-radius: 20px; background: var(--card-bg);
-            border: 2px solid var(--accent-blue); font-size: 0.85rem; font-weight: 700; color: white;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3); cursor: pointer;
-        }
-        .node-root { border-color: var(--accent-pink); background: #3b0764; }
-        .node-child { border-color: var(--accent-cyan); }
 
-        /* AUDIO PULSE INDICATOR */
-        .audio-wave { display: inline-block; width: 12px; height: 12px; background: var(--accent-pink); border-radius: 50%; margin-left: 8px; }
-        .listening { animation: pulse 1s infinite; }
-        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.5); } 100% { transform: scale(1); } }
+        .item-list-card {
+            background: #0f172a; border: 1px solid var(--border); padding: 12px;
+            border-radius: 8px; margin-top: 8px; display: flex; justify-content: space-between; align-items: center;
+        }
     </style>
 </head>
 <body>
 
 <div class="app-container">
-    <!-- HEADER & GAMIFICATION -->
     <header>
         <div>
-            <h2 style="color: var(--accent-cyan);">⚡ StudyCraft AI</h2>
-            <p id="user-goal-display" style="font-size: 0.8rem; color: var(--text-muted);">Target: 85% in Biology | Exam: 12 Days</p>
+            <h2 style="color: var(--accent-cyan);">⚡ StudyCraft AI Pro</h2>
+            <p id="user-profile-summary" style="font-size: 0.8rem; color: var(--text-muted);">Account: Default Student | 0 Goals | 0 Decks Saved</p>
         </div>
         <div class="user-stats">
-            <span class="badge badge-cyan" id="xp-display">⚡ 120 XP</span>
-            <span class="badge badge-purple" id="level-display">🏆 Level 2</span>
+            <span class="badge badge-cyan" id="xp-display">⚡ 0 XP</span>
+            <span class="badge badge-purple" id="level-display">🏆 Level 1</span>
             <button class="btn" style="padding: 4px 8px; font-size: 0.75rem;" onclick="toggleDyslexia()">Aa Font</button>
         </div>
     </header>
 
-    <!-- NAVIGATION TABS -->
     <nav>
-        <button class="tab-btn active" onclick="showTab('tab-goals')">Goals & Profile</button>
-        <button class="tab-btn" onclick="showTab('tab-content')">Content & Parser</button>
-        <button class="tab-btn" onclick="showTab('tab-tools')">Flashcards & Timer</button>
-        <button class="tab-btn" onclick="showTab('tab-cloze')">Cloze Recall</button>
-        <button class="tab-btn" onclick="showTab('tab-audio')">Voice Mode</button>
-        <button class="tab-btn" onclick="showTab('tab-mindmap')">Concept Mind Map</button>
-        <button class="tab-btn" onclick="showTab('tab-analytics')">Analytics</button>
-        <button class="tab-btn" onclick="showTab('tab-community')">Community</button>
+        <button class="tab-btn active" onclick="showTab('tab-goals')">Account & Goals</button>
+        <button class="tab-btn" onclick="showTab('tab-content')">Multi-File Importer</button>
+        <button class="tab-btn" onclick="showTab('tab-tools')">Flashcards & Decks</button>
+        <button class="tab-btn" onclick="showTab('tab-quiz')">JSON & Auto Quiz Engine</button>
     </nav>
 
-    <!-- TAB 1: GOALS & SETTINGS -->
+    <!-- TAB 1: ACCOUNT & MULTI-GOAL MANAGER -->
     <section id="tab-goals" class="panel active">
-        <h3>1. Goals & Adaptive Plan</h3>
+        <h3>1. Multi-Goal Account Manager</h3>
         <div class="grid-2">
             <div>
-                <label>Target Subject</label>
-                <input type="text" id="goal-subject" value="Biology">
+                <h4>Add New Study Goal</h4>
+                <label>Subject / Course</label>
+                <input type="text" id="goal-subject" placeholder="e.g. Organic Chemistry">
                 
-                <label>Target Score (%)</label>
-                <input type="number" id="goal-score" value="85">
+                <label>Target Grade / Score (%)</label>
+                <input type="number" id="goal-score" placeholder="90">
 
-                <label>Exam Deadline</label>
+                <label>Target Date</label>
                 <input type="date" id="goal-date">
 
-                <button class="btn" onclick="saveGoals()">Save Goals</button>
+                <button class="btn" onclick="addGoal()">Save Goal to Account</button>
             </div>
             <div>
-                <h4>Settings & Preferences</h4>
-                <label><input type="checkbox" checked> Spaced Repetition Nudges</label><br>
-                <label><input type="checkbox" checked> Streak-Protection Reminders</label><br>
-                <label><input type="checkbox" checked> Ambient Background Sounds</label>
+                <h4>Saved Account Goals</h4>
+                <div id="goals-list-container" style="max-height: 250px; overflow-y: auto; margin-top: 10px;">
+                    <p style="color: var(--text-muted); font-size: 0.85rem;">No goals added yet.</p>
+                </div>
             </div>
         </div>
     </section>
 
-    <!-- TAB 2: CONTENT MANAGEMENT -->
+    <!-- TAB 2: MULTI-FILE IMPORTER -->
     <section id="tab-content" class="panel">
-        <h3>2. Import Study Material</h3>
-        <label>Paste Raw Notes or Document Text</label>
-        <textarea id="raw-notes" rows="6" placeholder="Mitochondria produces ATP energy. Chloroplasts handle photosynthesis in plant cells."></textarea>
-        <button class="btn" onclick="processNotes()">Parse into Flashcards</button>
+        <h3>2. Multi-File Document & Slide Parser</h3>
+        <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 12px;">Upload multiple PDFs, PPT notes, or TXT files at once to convert them into study decks.</p>
+
+        <div class="file-drop-zone" onclick="document.getElementById('multi-file-input').click()">
+            <p style="font-weight: 700;">📁 Click to select multiple files (PDF, PPT, TXT)</p>
+            <input type="file" id="multi-file-input" multiple accept=".pdf,.txt,.ppt,.pptx" style="display: none;" onchange="handleMultipleFiles(event)">
+        </div>
+
+        <label style="margin-top: 16px;">Or Paste Mass Text Content</label>
+        <textarea id="raw-notes" rows="4" placeholder="Mitochondria produces ATP. Chloroplast carries out photosynthesis. Nucleus stores genomic DNA."></textarea>
+
+        <label>Deck Title for Account Storage</label>
+        <input type="text" id="deck-title-input" placeholder="e.g. Bio Chapter 1 Notes">
         
-        <h4 style="margin-top: 20px;">Resource Library</h4>
-        <div id="library-list" style="margin-top: 10px; color: var(--text-muted); font-size: 0.9rem;">No decks generated yet.</div>
+        <button class="btn btn-green" onclick="generateAndSaveDeck()">Parse & Save Deck to Account</button>
     </section>
 
-    <!-- TAB 3: STUDY TOOLS (FLASHCARDS & TIMER) -->
+    <!-- TAB 3: FLASHCARDS & SAVED DECKS -->
     <section id="tab-tools" class="panel">
-        <h3>3. Flashcards & Pomodoro Timer</h3>
+        <h3>3. Flashcards & Saved Decks</h3>
         <div class="grid-2">
             <div>
-                <h4>🎴 Spaced Repetition Deck</h4>
+                <h4>🎴 Active Deck Study Session</h4>
                 <div class="flashcard" id="card-display" onclick="flipCard()" style="margin-top: 10px;">
-                    Click "Parse into Flashcards" in Content tab to begin!
+                    Select or create a deck to start reviewing!
                 </div>
                 <div style="display: flex; gap: 10px; margin-top: 10px;">
-                    <button class="btn" style="background: #ef4444; flex: 1;" onclick="rateCard(1)">Hard</button>
-                    <button class="btn" style="background: var(--accent-green); flex: 1; color: black;" onclick="rateCard(3)">Easy (+15 XP)</button>
+                    <button class="btn" style="background: var(--accent-red); flex: 1;" onclick="rateCard(1)">Hard</button>
+                    <button class="btn btn-green" style="flex: 1;" onclick="rateCard(3)">Easy (+15 XP)</button>
                 </div>
             </div>
 
             <div>
-                <h4>⏱️ Focus Timer</h4>
-                <div style="text-align: center; font-size: 3rem; font-weight: 800; margin: 20px 0;" id="timer-display">25:00</div>
-                <div style="display: flex; justify-content: center; gap: 10px;">
-                    <button class="btn" onclick="toggleTimer()">Start / Pause</button>
-                    <button class="btn" style="background: var(--border);" onclick="resetTimer()">Reset</button>
+                <h4>📚 Account Deck Library</h4>
+                <div id="decks-library-container" style="max-height: 250px; overflow-y: auto;">
+                    <p style="color: var(--text-muted); font-size: 0.85rem;">No saved decks found.</p>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- TAB 4: INTERACTIVE MODE — CLOZE DELETION -->
-    <section id="tab-cloze" class="panel">
-        <h3>4. Active Recall — Cloze Deletion Editor</h3>
-        <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 14px;">Highlight text and click <b>"Hide Selected Words"</b> to generate interactive fill-in-the-blank cards.</p>
+    <!-- TAB 4: JSON & AUTO QUIZ ENGINE -->
+    <section id="tab-quiz" class="panel">
+        <h3>4. Automatic & JSON Quiz Engine</h3>
         <div class="grid-2">
             <div>
-                <label>Input Text</label>
-                <textarea id="cloze-input" rows="8">Photosynthesis takes place inside the chloroplasts of plant cells. Chlorophyll absorbs sunlight to produce glucose.</textarea>
-                <button class="btn btn-pink" onclick="createCloze()">Hide Selected Words</button>
+                <h4>Import Custom Quiz via JSON Code</h4>
+                <label>Paste JSON Array Code</label>
+                <textarea id="json-quiz-input" rows="8" placeholder='[
+  {
+    "question": "What stores DNA in a eukaryotic cell?",
+    "options": ["Ribosome", "Nucleus", "Cytoplasm", "Cell Wall"],
+    "correct": 1
+  }
+]'></textarea>
+                <button class="btn btn-pink" onclick="importJsonQuiz()">Import JSON Quiz</button>
+                <button class="btn" onclick="generateAutoQuizFromActiveDeck()">Auto-Generate from Active Deck</button>
             </div>
+
             <div>
-                <label>Interactive Test View (Click blanks to reveal)</label>
-                <div id="cloze-output" style="background: #0f172a; padding: 16px; border-radius: 8px; min-height: 180px; border: 1px solid var(--border); line-height: 1.8;">
-                    Highlight text on the left to start!
+                <h4>Interactive Quiz Module</h4>
+                <div style="background: #0f172a; padding: 20px; border-radius: 8px; border: 1px solid var(--border);">
+                    <h4 id="quiz-question">No active quiz question loaded.</h4>
+                    <div id="quiz-options"></div>
+                    <div id="quiz-feedback" style="margin-top: 14px; font-weight: 700; display: none;"></div>
+                    <button class="btn" id="next-quiz-btn" style="margin-top: 14px; display: none;" onclick="nextQuestion()">Next Question ➔</button>
                 </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- TAB 5: INTERACTIVE MODE — VOICE & AUDIO -->
-    <section id="tab-audio" class="panel">
-        <h3>5. Hands-Free Voice Recitation</h3>
-        <div class="grid-2">
-            <div style="background: #0f172a; padding: 20px; border-radius: 8px; border: 1px solid var(--border);">
-                <h4>🔊 Text-to-Speech Prompt</h4>
-                <p id="tts-prompt" style="font-size: 1.1rem; font-weight: 600; margin: 16px 0;">What is the primary function of the Mitochondria?</p>
-                <button class="btn" onclick="speakPrompt()">▶ Read Question Aloud</button>
-            </div>
-
-            <div style="background: #0f172a; padding: 20px; border-radius: 8px; border: 1px solid var(--border);">
-                <h4>🎙️ Voice Test <span id="mic-indicator" class="audio-wave" style="display:none;"></span></h4>
-                <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 10px;">Click record and speak your answer:</p>
-                <button class="btn btn-green" onclick="startSpeechRecognition()">🎙️ Start Speaking</button>
-                <div id="speech-transcript" style="margin-top: 14px; font-style: italic; color: var(--accent-cyan); font-size: 0.9rem;">Speech output will appear here...</div>
-            </div>
-        </div>
-    </section>
-
-    <!-- TAB 6: INTERACTIVE MODE — CONCEPT MIND MAP -->
-    <section id="tab-mindmap" class="panel">
-        <h3>6. Interactive Concept Mind Map</h3>
-        <div style="margin-bottom: 14px; display: flex; gap: 10px;">
-            <input type="text" id="map-root-input" value="Cell Biology" style="max-width: 200px;" placeholder="Root Topic">
-            <input type="text" id="map-child-input" value="Mitochondria, Chloroplast, Nucleus, Ribosome" placeholder="Subtopics (comma separated)">
-            <button class="btn" onclick="generateMindMap()">Build Mind Map</button>
-        </div>
-        <div class="mindmap-container" id="mindmap-canvas"></div>
-    </section>
-
-    <!-- TAB 7: PROGRESS & ANALYTICS -->
-    <section id="tab-analytics" class="panel">
-        <h3>7. Analytics & Mastery</h3>
-        <div class="grid-2">
-            <div>
-                <h4>7-Day Study Heatmap</h4>
-                <div class="heatmap">
-                    <div class="day-box active">M</div>
-                    <div class="day-box active">T</div>
-                    <div class="day-box active">W</div>
-                    <div class="day-box">T</div>
-                    <div class="day-box active">F</div>
-                    <div class="day-box">S</div>
-                    <div class="day-box">S</div>
-                </div>
-            </div>
-            <div>
-                <h4>Weak-Spot Inspector</h4>
-                <p style="font-size: 0.9rem; color: var(--text-muted); margin-top: 10px;">
-                    ⚠️ Weak Topic Identified: <b>Cellular Respiration</b><br>
-                    Retention Index: <b>42% Accuracy</b>
-                </p>
-            </div>
-        </div>
-    </section>
-
-    <!-- TAB 8: COMMUNITY -->
-    <section id="tab-community" class="panel">
-        <h3>8. Community Shared Decks</h3>
-        <div class="grid-3">
-            <div style="background: #0f172a; padding: 14px; border-radius: 8px; border: 1px solid var(--border);">
-                <h4>AP Bio Deck</h4>
-                <p style="font-size: 0.8rem; color: var(--text-muted);">By @AlexStudios</p>
-                <button class="btn" style="font-size: 0.75rem;">Import Deck</button>
-            </div>
-            <div style="background: #0f172a; padding: 14px; border-radius: 8px; border: 1px solid var(--border);">
-                <h4>Organic Chem Formulas</h4>
-                <p style="font-size: 0.8rem; color: var(--text-muted);">By @SarahK</p>
-                <button class="btn" style="font-size: 0.75rem;">Import Deck</button>
             </div>
         </div>
     </section>
 </div>
 
 <script>
-    // GLOBAL STATE
-    let xp = 120;
-    let level = 2;
-    let flashcards = [];
+    // ACCOUNT STORAGE STATE
+    let accountData = {
+        xp: 0,
+        level: 1,
+        goals: [],
+        decks: [],
+        quizzes: []
+    };
+
+    let activeDeckIndex = -1;
     let currentCardIndex = 0;
     let showingFront = true;
-    let timerSeconds = 1500;
-    let timerInterval = null;
+    let activeQuiz = [];
+    let currentQuizIndex = 0;
 
-    // TAB NAVIGATION
+    // INITIALIZATION
+    window.onload = function() {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+        loadAccountFromStorage();
+        renderGoals();
+        renderDecks();
+    };
+
+    function saveAccountToStorage() {
+        localStorage.setItem('studycraft_account_data', JSON.stringify(accountData));
+        updateHeaderStats();
+    }
+
+    function loadAccountFromStorage() {
+        const data = localStorage.getItem('studycraft_account_data');
+        if (data) {
+            accountData = JSON.parse(data);
+        }
+        updateHeaderStats();
+    }
+
+    function updateHeaderStats() {
+        accountData.level = Math.floor(accountData.xp / 100) + 1;
+        document.getElementById('xp-display').innerText = `⚡ ${accountData.xp} XP`;
+        document.getElementById('level-display').innerText = `🏆 Level ${accountData.level}`;
+        document.getElementById('user-profile-summary').innerText = `Account: Student | ${accountData.goals.length} Goals | ${accountData.decks.length} Decks Saved`;
+    }
+
     function showTab(tabId) {
         document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -303,176 +261,242 @@
         event.target.classList.add('active');
     }
 
-    // GOALS ENGINE
-    function saveGoals() {
+    // MULTI-GOAL ENGINE
+    function addGoal() {
         const subject = document.getElementById('goal-subject').value;
         const score = document.getElementById('goal-score').value;
-        document.getElementById('user-goal-display').innerText = `Target: ${score}% in ${subject} | Goal Active`;
-        alert("Adaptive plan saved!");
+        const date = document.getElementById('goal-date').value;
+
+        if (!subject || !score) return alert("Please fill in subject and score!");
+
+        accountData.goals.push({ id: Date.now(), subject, score, date });
+        saveAccountToStorage();
+        renderGoals();
+
+        document.getElementById('goal-subject').value = '';
+        document.getElementById('goal-score').value = '';
     }
 
-    // PARSER & FLASHCARDS
-    function processNotes() {
+    function renderGoals() {
+        const container = document.getElementById('goals-list-container');
+        if (accountData.goals.length === 0) {
+            container.innerHTML = `<p style="color: var(--text-muted); font-size: 0.85rem;">No goals added yet.</p>`;
+            return;
+        }
+
+        container.innerHTML = accountData.goals.map((g, idx) => `
+            <div class="item-list-card">
+                <div>
+                    <b>${g.subject}</b> — Target: ${g.score}%
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">Deadline: ${g.date || 'No Date'}</div>
+                </div>
+                <button class="btn btn-danger" style="padding: 4px 8px; font-size: 0.7rem;" onclick="deleteGoal(${idx})">Delete</button>
+            </div>
+        `).join('');
+    }
+
+    function deleteGoal(index) {
+        accountData.goals.splice(index, 1);
+        saveAccountToStorage();
+        renderGoals();
+    }
+
+    // MULTI-FILE PARSER
+    async function handleMultipleFiles(event) {
+        const files = Array.from(event.target.files);
+        let extractedText = "";
+
+        for (let file of files) {
+            if (file.type === "text/plain") {
+                const text = await file.text();
+                extractedText += `\n` + text;
+            } else if (file.type === "application/pdf") {
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const content = await page.getTextContent();
+                    extractedText += " " + content.items.map(item => item.str).join(" ");
+                }
+            } else {
+                extractedText += `\n[Uploaded non-plain text file: ${file.name}]`;
+            }
+        }
+
+        document.getElementById('raw-notes').value += extractedText;
+        alert(`Extracted text from ${files.length} file(s) into the raw notes box!`);
+    }
+
+    function generateAndSaveDeck() {
         const text = document.getElementById('raw-notes').value;
-        if (!text) return alert("Please enter text first!");
-        
-        const sentences = text.split('.').filter(s => s.trim().length > 5);
-        flashcards = sentences.map((s, idx) => ({
-            front: `Concept ${idx + 1}`,
+        const title = document.getElementById('deck-title-input').value || `Deck #${accountData.decks.length + 1}`;
+
+        if (!text) return alert("No text content provided to process!");
+
+        const sentences = text.split('.').filter(s => s.trim().length > 8);
+        const cards = sentences.map((s, idx) => ({
+            front: `Key Concept ${idx + 1}`,
             back: s.trim()
         }));
 
-        document.getElementById('library-list').innerText = `Loaded Deck: ${flashcards.length} Cards Generated.`;
+        accountData.decks.push({ title, cards });
+        saveAccountToStorage();
+        renderDecks();
+        loadDeck(accountData.decks.length - 1);
+        alert(`Saved new deck "${title}" with ${cards.length} flashcards!`);
+    }
+
+    function renderDecks() {
+        const container = document.getElementById('decks-library-container');
+        if (accountData.decks.length === 0) {
+            container.innerHTML = `<p style="color: var(--text-muted); font-size: 0.85rem;">No saved decks found.</p>`;
+            return;
+        }
+
+        container.innerHTML = accountData.decks.map((d, idx) => `
+            <div class="item-list-card">
+                <div>
+                    <b>${d.title}</b> (${d.cards.length} cards)
+                </div>
+                <div>
+                    <button class="btn" style="padding: 4px 8px; font-size: 0.7rem;" onclick="loadDeck(${idx})">Study</button>
+                    <button class="btn btn-danger" style="padding: 4px 8px; font-size: 0.7rem;" onclick="deleteDeck(${idx})">✕</button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function loadDeck(index) {
+        activeDeckIndex = index;
         currentCardIndex = 0;
+        showingFront = true;
         updateCardDisplay();
-        alert("Flashcards created!");
+        showTab('tab-tools');
+    }
+
+    function deleteDeck(index) {
+        accountData.decks.splice(index, 1);
+        if (activeDeckIndex === index) activeDeckIndex = -1;
+        saveAccountToStorage();
+        renderDecks();
+        updateCardDisplay();
     }
 
     function updateCardDisplay() {
         const display = document.getElementById('card-display');
-        if (flashcards.length === 0) return;
-        const card = flashcards[currentCardIndex];
+        if (activeDeckIndex === -1 || !accountData.decks[activeDeckIndex]) {
+            display.innerText = "Select or create a deck to start reviewing!";
+            return;
+        }
+        const deck = accountData.decks[activeDeckIndex];
+        const card = deck.cards[currentCardIndex];
         display.innerText = showingFront ? card.front : card.back;
     }
 
     function flipCard() {
+        if (activeDeckIndex === -1) return;
         showingFront = !showingFront;
         updateCardDisplay();
     }
 
     function rateCard(quality) {
-        if (flashcards.length === 0) return;
+        if (activeDeckIndex === -1) return;
         if (quality === 3) addXP(15);
         showingFront = true;
-        currentCardIndex = (currentCardIndex + 1) % flashcards.length;
+        const deck = accountData.decks[activeDeckIndex];
+        currentCardIndex = (currentCardIndex + 1) % deck.cards.length;
         updateCardDisplay();
     }
 
-    // TIMER
-    function toggleTimer() {
-        if (timerInterval) {
-            clearInterval(timerInterval);
-            timerInterval = null;
-        } else {
-            timerInterval = setInterval(() => {
-                timerSeconds--;
-                let m = Math.floor(timerSeconds / 60);
-                let s = timerSeconds % 60;
-                document.getElementById('timer-display').innerText = `${m}:${s < 10 ? '0' : ''}${s}`;
-                if (timerSeconds <= 0) {
-                    clearInterval(timerInterval);
-                    addXP(50);
-                    alert("Pomodoro complete! +50 XP");
-                }
-            }, 1000);
+    // JSON & AUTO QUIZ LOGIC
+    function importJsonQuiz() {
+        const jsonStr = document.getElementById('json-quiz-input').value;
+        try {
+            const parsed = JSON.parse(jsonStr);
+            if (Array.isArray(parsed) && parsed[0].question && parsed[0].options) {
+                activeQuiz = parsed;
+                currentQuizIndex = 0;
+                loadQuizQuestion();
+                alert("JSON Quiz imported successfully!");
+            } else {
+                throw new Error("Invalid structure");
+            }
+        } catch (e) {
+            alert("Invalid JSON format. Please ensure it is an array of question objects.");
         }
     }
 
-    function resetTimer() {
-        clearInterval(timerInterval);
-        timerInterval = null;
-        timerSeconds = 1500;
-        document.getElementById('timer-display').innerText = "25:00";
-    }
-
-    // CLOZE MODE
-    function createCloze() {
-        const input = document.getElementById('cloze-input');
-        const start = input.selectionStart;
-        const end = input.selectionEnd;
-        const text = input.value;
-
-        if (start === end) return alert("Highlight words to hide first!");
-
-        const selectedText = text.substring(start, end);
-        const before = text.substring(0, start);
-        const after = text.substring(end);
-
-        document.getElementById('cloze-output').innerHTML = `${before}<span class="cloze-blank" onclick="revealCloze(this)">${selectedText}</span>${after}`;
-    }
-
-    function revealCloze(el) {
-        el.classList.add('revealed');
-        addXP(5);
-    }
-
-    // VOICE MODE
-    function speakPrompt() {
-        const text = document.getElementById('tts-prompt').innerText;
-        if ('speechSynthesis' in window) {
-            const utterance = new SpeechSynthesisUtterance(text);
-            window.speechSynthesis.speak(utterance);
+    function generateAutoQuizFromActiveDeck() {
+        if (activeDeckIndex === -1 || !accountData.decks[activeDeckIndex]) {
+            return alert("Please load an active deck first!");
         }
+
+        const deck = accountData.decks[activeDeckIndex];
+        activeQuiz = deck.cards.map((c, i) => ({
+            question: `What relates to: ${c.back}?`,
+            options: [c.front, `Option B`, `Option C`, `Option D`],
+            correct: 0
+        }));
+
+        currentQuizIndex = 0;
+        loadQuizQuestion();
+        alert("Generated automated quiz from active deck!");
     }
 
-    function startSpeechRecognition() {
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRecognition) return alert("Speech recognition not supported on this browser.");
+    function loadQuizQuestion() {
+        if (activeQuiz.length === 0) return;
+        const q = activeQuiz[currentQuizIndex];
+        document.getElementById('quiz-question').innerText = `Q${currentQuizIndex + 1}: ${q.question}`;
+        
+        const optionsDiv = document.getElementById('quiz-options');
+        optionsDiv.innerHTML = '';
+        document.getElementById('quiz-feedback').style.display = 'none';
+        document.getElementById('next-quiz-btn').style.display = 'none';
 
-        const recognition = new SpeechRecognition();
-        const indicator = document.getElementById('mic-indicator');
-        const transcriptDiv = document.getElementById('speech-transcript');
-
-        recognition.onstart = () => {
-            indicator.style.display = 'inline-block';
-            indicator.classList.add('listening');
-            transcriptDiv.innerText = "Listening...";
-        };
-
-        recognition.onspeechend = () => {
-            indicator.style.display = 'none';
-            recognition.stop();
-        };
-
-        recognition.onresult = (e) => {
-            transcriptDiv.innerText = `You said: "${e.results[0][0].transcript}"`;
-            addXP(10);
-        };
-
-        recognition.start();
-    }
-
-    // MIND MAP
-    function generateMindMap() {
-        const canvas = document.getElementById('mindmap-canvas');
-        canvas.innerHTML = '';
-
-        const rootText = document.getElementById('map-root-input').value || "Concept";
-        const children = (document.getElementById('map-child-input').value || "").split(',').map(c => c.trim()).filter(c => c);
-
-        const rootNode = document.createElement('div');
-        rootNode.className = 'node node-root';
-        rootNode.innerText = rootText;
-        canvas.appendChild(rootNode);
-
-        const radius = 110;
-        children.forEach((child, idx) => {
-            const angle = (idx / children.length) * (2 * Math.PI);
-            const x = Math.round(radius * Math.cos(angle));
-            const y = Math.round(radius * Math.sin(angle));
-
-            const childNode = document.createElement('div');
-            childNode.className = 'node node-child';
-            childNode.innerText = child;
-            childNode.style.transform = `translate(${x}px, ${y}px)`;
-            canvas.appendChild(childNode);
+        q.options.forEach((opt, idx) => {
+            const btn = document.createElement('div');
+            btn.className = 'quiz-option';
+            btn.innerText = `${String.fromCharCode(65 + idx)}. ${opt}`;
+            btn.onclick = () => selectAnswer(idx, q.correct, btn);
+            optionsDiv.appendChild(btn);
         });
     }
 
-    // GAMIFICATION & ACCESSIBILITY
+    function selectAnswer(selected, correct, element) {
+        const options = document.querySelectorAll('.quiz-option');
+        options.forEach(opt => opt.onclick = null);
+
+        const feedback = document.getElementById('quiz-feedback');
+        feedback.style.display = 'block';
+
+        if (selected === correct) {
+            element.classList.add('correct');
+            feedback.innerText = "✨ Correct! +20 XP";
+            feedback.style.color = "var(--accent-green)";
+            addXP(20);
+        } else {
+            element.classList.add('wrong');
+            options[correct].classList.add('correct');
+            feedback.innerText = "❌ Incorrect!";
+            feedback.style.color = "var(--accent-red)";
+        }
+
+        document.getElementById('next-quiz-btn').style.display = 'block';
+    }
+
+    function nextQuestion() {
+        currentQuizIndex = (currentQuizIndex + 1) % activeQuiz.length;
+        loadQuizQuestion();
+    }
+
     function addXP(amount) {
-        xp += amount;
-        level = Math.floor(xp / 100) + 1;
-        document.getElementById('xp-display').innerText = `⚡ ${xp} XP`;
-        document.getElementById('level-display').innerText = `🏆 Level ${level}`;
+        accountData.xp += amount;
+        saveAccountToStorage();
     }
 
     function toggleDyslexia() {
         document.body.classList.toggle('dyslexic');
     }
-
-    // INIT
-    generateMindMap();
 </script>
 </body>
 </html>
