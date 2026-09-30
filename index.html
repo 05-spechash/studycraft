@@ -109,6 +109,18 @@
         @keyframes cardIn { from { opacity:0; transform:translateY(5px) } to { opacity:1; transform:none } }
         .kbd { font-family:ui-monospace,SFMono-Regular,monospace; font-size:10px; padding:2px 5px; border:1px solid #475569; border-radius:5px; }
     </style>
+<link rel="manifest" href="studycraft-manifest.webmanifest">
+<meta name="theme-color" content="#4f46e5">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<style>
+.study-hub-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.study-mini-btn{padding:.55rem .75rem;border-radius:.75rem;font-size:.72rem;font-weight:700;border:1px solid rgba(148,163,184,.18);background:rgba(15,23,42,.7);color:#cbd5e1;transition:.2s}
+.study-mini-btn:hover{border-color:rgba(99,102,241,.7);color:#fff;background:rgba(30,41,59,.9)}
+.study-modal{position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(2,6,23,.82);backdrop-filter:blur(10px)}
+.study-modal.show{display:flex}
+.study-modal-card{width:min(920px,100%);max-height:90vh;overflow:auto;background:rgba(15,23,42,.96);border:1px solid rgba(148,163,184,.18);border-radius:24px;padding:22px;box-shadow:0 30px 90px rgba(0,0,0,.45)}
+</style>
 </head>
 <body class="bg-slate-950 text-slate-100 font-sans min-h-screen flex flex-col transition-colors duration-300">
 
@@ -435,12 +447,12 @@
                 <div class="flex items-center justify-between">
                     <div>
                         <h2 class="text-xl font-bold text-white"><i class="fa-solid fa-circle-question text-accent-rose mr-2"></i> SMART Quiz Engine</h2>
-                        <p class="text-xs text-slate-400">Contextual distractors generated from real material concepts, not generic placeholders.</p>
+                        <p class="text-xs text-slate-400">Quizzes are generated directly from your uploaded or pasted study material — independently of flashcards.</p>
                     </div>
                     <div class="flex gap-2">
                         <button id="importQuizJsonBtn" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700">Import Quiz JSON</button>
                         <input type="file" id="quizJsonInput" accept=".json,application/json" class="hidden">
-                        <button id="generateQuizFromCards" class="px-3 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white shadow-md">Convert Cards to Quiz</button>
+                        <button id="generateQuizFromCards" class="px-3 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white shadow-md">Generate Quiz from Material</button>
                     </div>
                 </div>
 
@@ -991,6 +1003,8 @@
 
         let currentImportSourceName = "";
         function extractConceptsFromText(text) {
+            const meta=inferSubjectAndTopic(currentImportSourceName);
+
             // Improved study-card extraction: preserve slide/line structure,
             // split long OCR/PPT text into atomic facts, and avoid giant cards.
             const termsContainer = document.getElementById('extractedTermsContainer');
@@ -1105,9 +1119,9 @@
                     dueAt: null,
                     source: 'material',
                     sourceName: currentImportSourceName || 'Pasted material',
-                    subject: currentImportSourceName ? (currentImportSourceName.split('.')[0].replace(/[_-]+/g,' ').split(/\s+/).slice(0,3).join(' ') || 'General') : 'General',
+                    subject: meta.subject,
                     tags: [],
-                    topic: ''
+                    topic: meta.topic
                 });
 
                 const tag = document.createElement('span');
@@ -1116,6 +1130,11 @@
                 termsContainer.appendChild(tag);
             });
 
+            userState.materialLibrary = Array.isArray(userState.materialLibrary) ? userState.materialLibrary : [];
+            userState.studySettings ||= {subject:'',chapter:'',dailyMinutes:30};
+            userState.aiSettings ||= {endpoint:'',apiKey:'',model:'gpt-4o-mini'};
+            userState.materialLibrary.push({ id:'mat_'+Date.now(), title:currentImportSourceName || 'Pasted material', text:String(text || ''), subject:meta.subject, chapter:meta.topic, createdAt:new Date().toISOString() });
+            userState.materialLibrary = userState.materialLibrary.slice(-30);
             if (newCards.length > 0) {
                 userState.cards.push(...newCards);
                 saveActiveUserData();
@@ -1124,6 +1143,8 @@
                 currentCardIndex = userState.cards.length - newCards.length;
                 isFlipped = false;
                 updateCardDisplay();
+                // Automatically prepare a source-material quiz when enough facts exist.
+                setTimeout(() => generateQuizFromMaterial(), 50);
             } else {
                 toast('I could not find enough separate facts to make flashcards. Try uploading clearer notes.', 'error');
             }
@@ -1171,54 +1192,39 @@
         document.querySelectorAll('.rate-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                if (!userState.cards || userState.cards.length === 0) return;
-                const rating = parseInt(btn.getAttribute('data-rate'));
-                const card = userState.cards[currentCardIndex];
-
-                const oldBox = card.box;
-                if (rating === 1) card.box = 1;
-                else if (rating === 2) card.box = Math.max(1, card.box);
-                else if (rating === 3) card.box = Math.min(5, card.box + 1);
-                else if (rating === 4) card.box = Math.min(5, card.box + 2);
-                const intervals = {1:0, 2:1, 3:3, 4:7, 5:14};
-                let days = intervals[card.box] ?? 1;
-                if (rating === 2) days = Math.max(1, Math.round((intervals[card.box] || 1) * 0.65));
-                if (rating === 1) days = 0;
-                card.intervalDays = days;
-                card.lastReviewed = new Date().toISOString();
-                card.dueAt = new Date(Date.now() + days * 86400000).toISOString();
-                card.reviewCount = (card.reviewCount || 0) + 1;
-                card.lastRating = rating;
-                card.ratingHistory = Array.isArray(card.ratingHistory) ? card.ratingHistory : [];
-                card.ratingHistory.push({rating, date: card.lastReviewed});
-                card.ratingHistory = card.ratingHistory.slice(-100);
-                card.previousBox = oldBox;
-
-                recordActivity(rating === 1 ? 5 : rating === 2 ? 10 : rating === 3 ? 15 : 20);
-                isFlipped = false;
-                const due = getDueCards();
-                const nextDueIndex = due.length ? userState.cards.indexOf(due[0]) : (currentCardIndex + 1) % userState.cards.length;
-                currentCardIndex = nextDueIndex >= 0 ? nextDueIndex : 0;
-                updateCardDisplay();
-                renderAdvancedDashboard();
+                if (!userState.cards?.length) return;
+                const rating=parseInt(btn.getAttribute('data-rate')); const card=userState.cards[currentCardIndex];
+                const now=new Date(); const oldBox=card.box||1;
+                card.ease=Number(card.ease)||2.5; card.stability=Number(card.stability)||0; card.lapses=Number(card.lapses)||0;
+                if(rating===1){card.box=1;card.lapses++;card.ease=Math.max(1.3,card.ease-.2);card.stability=0;}
+                else if(rating===2){card.box=Math.max(1,Math.min(5,oldBox));card.ease=Math.max(1.3,card.ease-.1);card.stability=Math.max(1,card.stability*.65||1);}
+                else if(rating===3){card.box=Math.min(5,oldBox+1);card.ease=Math.min(3.0,card.ease+.05);card.stability=Math.max(1,card.stability?card.stability*card.ease:1);}
+                else {card.box=Math.min(5,oldBox+2);card.ease=Math.min(3.2,card.ease+.15);card.stability=Math.max(1,card.stability?card.stability*(card.ease+.25):2);}
+                const base={1:1,2:1,3:3,4:7,5:14}[card.box]||1;
+                let days=rating===1?0:Math.max(1,Math.round(base*(1+Math.min(2,card.stability/7))*(card.ease/2.5)));
+                if(rating===2) days=Math.max(1,Math.round(days*.6));
+                card.intervalDays=days; card.lastReviewed=now.toISOString(); card.dueAt=new Date(now.getTime()+days*86400000).toISOString(); card.reviewCount=(card.reviewCount||0)+1; card.lastRating=rating;
+                card.ratingHistory=Array.isArray(card.ratingHistory)?card.ratingHistory:[]; card.ratingHistory.push({rating,date:card.lastReviewed,box:card.box,interval:days}); card.ratingHistory=card.ratingHistory.slice(-100);
+                card.reviewHistory=Array.isArray(card.reviewHistory)?card.reviewHistory:[]; card.reviewHistory.push({date:card.lastReviewed,rating,interval:days}); card.reviewHistory=card.reviewHistory.slice(-100);
+                card.previousBox=oldBox;
+                recordActivity(rating===1?5:rating===2?10:rating===3?15:20); isFlipped=false;
+                const due=getDueCards(); const next=due.length?userState.cards.indexOf(due[0]):(currentCardIndex+1)%userState.cards.length; currentCardIndex=next>=0?next:0;
+                savePro(); updateCardDisplay(); renderAdvancedDashboard();
             });
         });
 
-        /* ==========================================================================
-           SMART QUIZ ENGINE WITH CONTEXTUAL DISTRACTORS
-           ========================================================================== */
+        /* ========================================================================
+           MATERIAL-FIRST QUIZ ENGINE
+           Quizzes are generated directly from the uploaded/pasted source material.
+           Flashcards are a separate study product and are NOT used as the quiz source.
+           ======================================================================== */
         let currentQuizIndex = 0;
         let quizScore = 0;
         let activeQuizQuestions = [];
 
-        document.getElementById('generateQuizFromCards').addEventListener('click', generateQuizFromState);
+        document.getElementById('generateQuizFromCards')?.addEventListener('click', generateQuizFromMaterial);
 
-        /* ==========================================================================
-           QUIZ RELEVANCE ENGINE
-           Distractors must be related to the same concept/topic. Random answers from
-           unrelated cards are never used just to fill four buttons.
-           ========================================================================== */
-        const QUIZ_STOPWORDS = new Set('what is are was were the a an of to in on for from by and or how why when where which who does do did with this that these those explain define give name list describe identify state tell you about'.split(/\s+/));
+        const QUIZ_STOPWORDS = new Set('what is are was were the a an of to in on for from by and or how why when where which who does do did with this that these those explain define give name list describe identify state tell you about according accordingto'.split(/\s+/));
 
         function quizTokens(text) {
             return new Set(String(text || '').toLowerCase()
@@ -1240,144 +1246,160 @@
             return String(answer || '').replace(/\s+/g, ' ').trim();
         }
 
-        function scoreDistractor(target, candidate) {
-            if (!candidate || candidate === target) return -Infinity;
-            const tq = tokenSimilarity(target.question, candidate.question);
-            const ta = tokenSimilarity(target.question, candidate.answer);
-            const aa = tokenSimilarity(target.answer, candidate.answer);
-            const qa = tokenSimilarity(target.answer, candidate.question);
-            const sameSource = target.source && candidate.source && target.source === candidate.source ? 0.18 : 0;
-            const sameTopic = target.topic && candidate.topic && target.topic.toLowerCase() === candidate.topic.toLowerCase() ? 0.35 : 0;
-
-            // Strongly prefer conceptually related cards. Similar answer wording alone
-            // is not enough because it can create near-duplicate correct answers.
-            let score = (tq * 1.5) + (ta * 1.1) + (aa * 0.65) + (qa * 0.35) + sameSource + sameTopic;
-
-            // Avoid absurdly different answer sizes. A one-word answer beside a paragraph
-            // is usually an obviously bad distractor.
-            const targetWords = normalizedAnswer(target.answer).split(/\s+/).length;
-            const candWords = normalizedAnswer(candidate.answer).split(/\s+/).length;
-            const ratio = Math.min(targetWords, candWords) / Math.max(targetWords, candWords, 1);
-            if (ratio < 0.2) score -= 0.25;
-            if (ratio >= 0.45) score += 0.08;
-
-            return score;
-        }
-
-        function getRelevantDistractors(target, candidates, wanted = 3) {
-            const ranked = candidates
-                .filter(c => c !== target && normalizedAnswer(c.answer) !== normalizedAnswer(target.answer))
-                .map(c => ({ card:c, score:scoreDistractor(target,c) }))
-                .filter(x => x.score >= 0.20)
-                .sort((a,b) => b.score - a.score);
-
-            const selected = [];
-            for (const item of ranked) {
-                // Don't include two distractors that are essentially the same answer.
-                if (selected.some(x => tokenSimilarity(x.answer, item.card.answer) > 0.78)) continue;
-                selected.push(item.card);
-                if (selected.length >= wanted) break;
-            }
-            return selected;
-        }
-
-        function generateQuizFromState() {
-            ensureUserStateShape();
-            const usable = userState.cards.filter(c => c.question && c.answer && normalizedAnswer(c.answer).length > 1);
-            if (usable.length < 2) {
-                alert('Please add or process at least 2 useful cards to build a quiz.');
-                return;
-            }
-
-            const shuffled = [...usable].sort(() => Math.random() - 0.5);
-            const questions = [];
-
-            for (const card of shuffled) {
-                // Try to find three genuinely related distractors. If there are not
-                // enough, use two, then one. Never pad with an unrelated answer.
-                const distractors = getRelevantDistractors(card, usable, 3);
-                if (distractors.length < 1) continue;
-
-                const options = [normalizedAnswer(card.answer), ...distractors.map(d => normalizedAnswer(d.answer))]
-                    .filter((v,i,a) => a.indexOf(v) === i)
-                    .sort(() => Math.random() - 0.5);
-
-                // A 3-option question is preferable to a 4-option question containing
-                // a nonsense distractor.
-                if (options.length < 2) continue;
-
-                questions.push({
-                    question: String(card.question).trim(),
-                    correctAnswer: normalizedAnswer(card.answer),
-                    options,
-                    sourceCardId: card.id,
-                    topic: card.topic || '',
-                    difficulty: card.difficulty || 'mixed'
+        function materialFacts(text) {
+            const raw = String(text || '').replace(/\r/g, '').replace(/https?:\/\/\S+/gi, '');
+            const lines = raw.split(/\n+/).map(x => x.replace(/^[•·▪◦\-*–—]+\s*/, '').trim()).filter(Boolean);
+            const facts = [];
+            const add = (value, index) => {
+                let v = normalizedAnswer(value);
+                if (!v || v.length < 12) return;
+                if (/^(slide\s*\d+|box\s*\d+|click card to flip|question\s*\d+|[\d\s]+)$/i.test(v)) return;
+                // Break very long OCR/PPT lines at sentence boundaries first.
+                const pieces = v.length > 320 ? v.split(/(?<=[.!?;])\s+/) : [v];
+                pieces.forEach(piece => {
+                    piece = normalizedAnswer(piece);
+                    if (piece.length >= 12 && piece.length <= 420) facts.push({text:piece,index});
                 });
-                if (questions.length >= 10) break;
+            };
+            lines.forEach((line,i) => add(line,i));
+            if (facts.length < 3) {
+                raw.split(/(?<=[.!?])\s+/).forEach((x,i)=>add(x,i));
+            }
+            const seen = new Set();
+            return facts.filter(f => {
+                const key=f.text.toLowerCase();
+                if(seen.has(key)) return false;
+                seen.add(key); return true;
+            }).slice(0,200);
+        }
+
+        function makeMaterialQuestion(fact) {
+            const text = fact.text;
+            // X: definition / X - definition
+            let m = text.match(/^(.{2,90}?)\s*[:\-–—]\s*(.{12,})$/);
+            if (m && !/[.!?]$/.test(m[1]) && !/^general information/i.test(m[1])) {
+                return { question:`What is ${m[1].trim()}?`, answer:normalizedAnswer(m[2]), mode:'definition' };
+            }
+            // X is/was Y.
+            m = text.match(/^(.{2,90}?)\s+(?:is|was|are|were)\s+(.{12,})$/i);
+            if (m && !/^everything|everything we|there|this|it\b/i.test(m[1])) {
+                return { question:`What is ${m[1].trim()}?`, answer:normalizedAnswer(m[2].replace(/[.]$/,'')), mode:'definition' };
+            }
+            // Dates: ask what the source says happened at the date.
+            const date = text.match(/\b\d{1,2}(?:st|nd|rd|th)?\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{3,4}\b|\b(?:19|20)\d{2}\b/i);
+            if (date) return { question:`According to the material, what happened on ${date[0]}?`, answer:text, mode:'fact' };
+
+            // Cause/effect statements become focused recall questions when recognizable.
+            m = text.match(/^(.{2,100}?)\s+(because|due to|as a result of|caused|led to)\s+(.{12,})$/i);
+            if (m) return { question:`According to the material, what caused ${m[1].trim()}?`, answer:m[3].trim().replace(/[.]$/,''), mode:'cause' };
+
+            // Otherwise use a source-grounded statement question. The options are all
+            // drawn from the same material, so no unrelated card answer can leak in.
+            return { question:'Which statement is supported by the study material?', answer:text, mode:'statement' };
+        }
+
+        function relevantMaterialDistractors(targetFact, facts, wanted=3) {
+            const ranked=facts
+                .filter(f=>f!==targetFact && normalizedAnswer(f.text)!==normalizedAnswer(targetFact.text))
+                .map(f=>({fact:f, score:tokenSimilarity(targetFact.text,f.text)}))
+                .filter(x=>x.score>=0.12)
+                .sort((a,b)=>b.score-a.score);
+            const out=[];
+            for(const x of ranked){
+                if(out.some(y=>tokenSimilarity(y.text,x.fact.text)>0.82)) continue;
+                out.push(x.fact);
+                if(out.length>=wanted) break;
+            }
+            return out;
+        }
+
+        function generateQuizFromMaterial() {
+            ensureProState();
+            const text = document.getElementById('rawNotesInput')?.value?.trim() ||
+                (userState.materialLibrary?.length ? userState.materialLibrary[userState.materialLibrary.length-1].text : '');
+            if(!text){ toast('Upload or paste study material first.', 'error'); return; }
+
+            const facts=materialFacts(text);
+            if(facts.length<3){ toast('I need at least 3 separate facts in the material to make a reliable quiz.', 'error'); return; }
+
+            const questions=[];
+            const shuffled=[...facts].sort(()=>Math.random()-0.5);
+            for(const fact of shuffled){
+                const built=makeMaterialQuestion(fact);
+                const distractors=relevantMaterialDistractors(fact,facts,3);
+                if(distractors.length<2) continue;
+                const options=[built.answer,...distractors.map(x=>normalizedAnswer(x.text))]
+                    .filter((v,i,a)=>v && a.indexOf(v)===i)
+                    .sort(()=>Math.random()-0.5);
+                if(options.length<3) continue;
+                questions.push({
+                    question:built.question,
+                    correctAnswer:built.answer,
+                    options:options.slice(0,4),
+                    source:'material',
+                    sourceName:currentImportSourceName || userState.materialLibrary?.at(-1)?.title || 'Study material',
+                    sourceFact:fact.text,
+                    difficulty: built.mode==='statement' ? 'medium' : 'mixed'
+                });
+                if(questions.length>=10) break;
             }
 
-            if (!questions.length) {
-                toast('I could not find enough related material to make a reliable MCQ quiz. Add more cards from the same topic.', 'error');
+            if(!questions.length){
+                toast('The material does not contain enough related facts to make reliable MCQs. I will not use unrelated information just to fill the quiz.', 'error');
                 return;
             }
-
-            activeQuizQuestions = questions;
-            currentQuizIndex = 0;
-            quizScore = 0;
+            activeQuizQuestions=questions;
+            currentQuizIndex=0;
+            quizScore=0;
             renderQuizQuestion();
-            toast(`Generated ${questions.length} topic-relevant questions.`, 'success');
+            toast(`Generated ${questions.length} questions directly from the source material.`, 'success');
         }
 
         function renderQuizQuestion() {
-            if (!activeQuizQuestions.length) return;
-            const q = activeQuizQuestions[currentQuizIndex];
-            
-            document.getElementById('quizProgress').innerText = `Question ${currentQuizIndex + 1} of ${activeQuizQuestions.length}`;
-            document.getElementById('quizScore').innerText = `Score: ${quizScore} XP`;
-            document.getElementById('quizQuestionText').innerText = q.question;
-
-            const grid = document.getElementById('quizOptionsGrid');
-            grid.innerHTML = q.options.map((opt, idx) => `
-                <button onclick="checkQuizOption('${opt.replace(/'/g, "\\'")}', this)" class="p-3 text-left glass-card hover:bg-slate-800 rounded-xl border border-slate-700 text-xs text-slate-200 font-medium transition">
-                    ${opt}
-                </button>
-            `).join('');
-
+            if(!activeQuizQuestions.length) return;
+            const q=activeQuizQuestions[currentQuizIndex];
+            document.getElementById('quizProgress').innerText=`Question ${currentQuizIndex+1} of ${activeQuizQuestions.length}`;
+            document.getElementById('quizScore').innerText=`Score: ${quizScore} XP`;
+            document.getElementById('quizQuestionText').innerText=q.question;
+            const grid=document.getElementById('quizOptionsGrid');
+            grid.innerHTML=q.options.map((opt,idx)=>{
+                const safe=escapeHtml(opt);
+                return `<button data-option-index="${idx}" class="quiz-option p-3 text-left glass-card hover:bg-slate-800 rounded-xl border border-slate-700 text-xs text-slate-200 font-medium transition">${safe}</button>`;
+            }).join('');
+            grid.querySelectorAll('.quiz-option').forEach(btn=>btn.addEventListener('click',()=>checkQuizOption(q.options[Number(btn.dataset.optionIndex)],btn)));
             document.getElementById('quizExplanation').classList.add('hidden');
             document.getElementById('nextQuizBtn').classList.add('hidden');
         }
 
-        function checkQuizOption(selected, btn) {
-            const q = activeQuizQuestions[currentQuizIndex];
-            const isCorrect = selected === q.correctAnswer;
-            
-            if (isCorrect) {
-                btn.classList.add('bg-emerald-500/20', 'border-emerald-500', 'text-emerald-300');
-                quizScore += 20;
-                recordActivity(20);
-            } else {
-                btn.classList.add('bg-rose-500/20', 'border-rose-500', 'text-rose-300');
+        function checkQuizOption(selected,btn) {
+            const q=activeQuizQuestions[currentQuizIndex];
+            const isCorrect=selected===q.correctAnswer;
+            document.querySelectorAll('.quiz-option').forEach(b=>b.disabled=true);
+            if(isCorrect){
+                btn.classList.add('bg-emerald-500/20','border-emerald-500','text-emerald-300');
+                quizScore+=20; recordActivity(20);
+            }else{
+                btn.classList.add('bg-rose-500/20','border-rose-500','text-rose-300');
+                document.querySelectorAll('.quiz-option').forEach(b=>{if(b.textContent.trim()===q.correctAnswer)b.classList.add('bg-emerald-500/20','border-emerald-500','text-emerald-300');});
             }
-
-            document.getElementById('quizScore').innerText = `Score: ${quizScore} XP`;
+            const exp=document.getElementById('quizExplanation');
+            exp.innerText=`Correct answer: ${q.correctAnswer}`;
+            exp.classList.remove('hidden');
+            document.getElementById('quizScore').innerText=`Score: ${quizScore} XP`;
             document.getElementById('nextQuizBtn').classList.remove('hidden');
         }
 
-        document.getElementById('nextQuizBtn').addEventListener('click', () => {
+        document.getElementById('nextQuizBtn').addEventListener('click',()=>{
             currentQuizIndex++;
-            if (currentQuizIndex < activeQuizQuestions.length) {
-                renderQuizQuestion();
-            } else {
-                const total=activeQuizQuestions.length;
-                const correct=Math.round(quizScore/20);
-                userState.quizHistory=userState.quizHistory||[];
-                userState.quizHistory.push({date:new Date().toISOString(),score:Math.round(correct/total*100),correct,total});
-                userState.quizHistory=userState.quizHistory.slice(-50);
-                saveActiveUserData();
-                renderAdvancedDashboard();
-                toast(`Quiz complete: ${correct}/${total} correct (${Math.round(correct/total*100)}%).`,'success');
-            }
+            if(currentQuizIndex<activeQuizQuestions.length){renderQuizQuestion();return;}
+            const total=activeQuizQuestions.length;
+            const correct=Math.round(quizScore/20);
+            userState.quizHistory=userState.quizHistory||[];
+            userState.quizHistory.push({date:new Date().toISOString(),score:Math.round(correct/total*100),correct,total,source:'material',sourceName:activeQuizQuestions[0]?.sourceName||'Study material'});
+            userState.quizHistory=userState.quizHistory.slice(-50);
+            saveActiveUserData();
+            renderAdvancedDashboard();
+            toast(`Quiz complete: ${correct}/${total} correct (${Math.round(correct/total*100)}%).`,'success');
         });
 
         /* ==========================================================================
@@ -1608,6 +1630,25 @@
             return chunks.join('\n');
         }
 
+        async function extractPdfPageTextStructured(page){
+            const content=await page.getTextContent();
+            const rows=[];
+            for(const item of (content.items||[])){
+                const str=String(item.str||'').trim(); if(!str) continue;
+                const y=Math.round((item.transform&&item.transform[5])||0);
+                let row=rows.find(r=>Math.abs(r.y-y)<=3);
+                if(!row){row={y,parts:[]};rows.push(row);}
+                row.parts.push({x:(item.transform&&item.transform[4])||0,str});
+            }
+            return rows.sort((a,b)=>b.y-a.y).map(r=>r.parts.sort((a,b)=>a.x-b.x).map(x=>x.str).join(' ').replace(/\s+/g,' ').trim()).filter(Boolean).join('\n');
+        }
+        function inferSubjectAndTopic(sourceName){
+            const n=String(sourceName||'').replace(/\.[^.]+$/,'').replace(/[_-]+/g,' ').trim();
+            const subject=(document.getElementById('materialSubject')?.value||document.getElementById('centerSubject')?.value||userState?.studySettings?.subject||'').trim() || (n.split(/\s+/)[0]||'General');
+            const topic=(document.getElementById('materialChapter')?.value||document.getElementById('centerChapter')?.value||userState?.studySettings?.chapter||'').trim() || n || 'General';
+            return {subject,topic};
+        }
+
         async function processUploadedFile(file) {
             try {
                 currentImportSourceName = file.name;
@@ -1627,7 +1668,7 @@
                     for (let pageNo=1; pageNo<=pdf.numPages; pageNo++) {
                         const page = await pdf.getPage(pageNo);
                         const content = await page.getTextContent();
-                        const pageText = content.items.map(x => x.str).join(' ').trim();
+                        const pageText = await extractPdfPageTextStructured(page);
                         if (pageText) { pagesWithText++; text += pageText + '\n'; }
                     }
                     // If the PDF is scanned/image-only, render and OCR each page.
@@ -1657,8 +1698,8 @@
                     for (const name of slideNames) {
                         const xml=await zip.files[name].async('text');
                         const doc=new DOMParser().parseFromString(xml,'application/xml');
-                        const parts=[...doc.getElementsByTagName('a:t')].map(n=>n.textContent).filter(Boolean);
-                        if(parts.length) text += parts.join(' ') + '\n';
+                        const paragraphs=[...doc.getElementsByTagName('a:p')].map(p=>[...p.getElementsByTagName('a:t')].map(n=>n.textContent).join(' ').trim()).filter(Boolean);
+                        if(paragraphs.length) text += `[Slide ${name.match(/slide(\d+)\.xml/i)?.[1]||''}]\n` + paragraphs.join('\n') + '\n';
                     }
                     // OCR embedded slide images as well, so screenshots/scanned worksheets inside PPTX are readable.
                     const mediaNames = Object.keys(zip.files).filter(n => /^ppt\/media\//i.test(n));
@@ -1870,13 +1911,16 @@
             userState.dailyChallenge ||= {date:'', done:0};
             userState.subjects ||= [];
             userState.notes = Array.isArray(userState.notes) ? userState.notes : [];
+            userState.materialLibrary = Array.isArray(userState.materialLibrary) ? userState.materialLibrary : [];
+            userState.studySettings ||= {subject:'',chapter:'',dailyMinutes:30};
+            userState.aiSettings ||= {endpoint:'',apiKey:'',model:'gpt-4o-mini'};
             userState.cards.forEach(c=>{
                 c.tags=Array.isArray(c.tags)?c.tags:[];
                 c.subject=c.subject||'General';
                 c.topic=c.topic||'';
                 c.sourceName=c.sourceName||'';
                 c.ratingHistory=Array.isArray(c.ratingHistory)?c.ratingHistory:[];
-                c.reviewHistory=Array.isArray(c.reviewHistory)?c.reviewHistory:[];
+                c.reviewHistory=Array.isArray(c.reviewHistory)?c.reviewHistory:[]; c.ease=Number(c.ease)||2.5; c.stability=Number(c.stability)||0; c.lapses=Number(c.lapses)||0;
             });
         }
         function savePro(){ ensureProState(); saveActiveUserData(); renderProSuite(); renderAdvancedDashboard(); }
@@ -1978,34 +2022,34 @@
             alert(`Plan saved for ${date}. Topics: ${topics}`);
         }
         function startExamMode(){
-            const cards=(userState.cards||[]).filter(c=>c.question&&c.answer); if(cards.length<2){toast('Add at least 2 cards first.','error');return;}
-            const count=Math.min(20,Number(prompt(`How many questions? (2-${Math.min(20,cards.length)})`))||10); const qs=[...cards].sort(()=>Math.random()-.5).slice(0,count);
-            const overlay=document.createElement('div'); overlay.id='examOverlay'; overlay.className='fixed inset-0 z-[90] bg-slate-950/95 flex items-center justify-center p-4';
-            let i=0,score=0,start=Date.now();
-            function render(){
-              const c=qs[i]; const others=cards.filter(x=>x.id!==c.id).sort(()=>Math.random()-.5).slice(0,3).map(x=>x.answer); const opts=[c.answer,...others].sort(()=>Math.random()-.5);
-              overlay.innerHTML=`<div class="w-full max-w-2xl glass-panel p-6 rounded-3xl"><div class="flex justify-between text-xs text-slate-400"><span>Exam ${i+1}/${qs.length}</span><span id="examTimer">${Math.floor((Date.now()-start)/1000)}s</span></div><h2 class="text-xl font-bold text-white mt-6">${escapeHtml(c.question)}</h2><div class="grid gap-3 mt-6">${opts.map((o,j)=>`<button class="examOpt text-left p-4 rounded-xl bg-slate-900 border border-slate-700 text-sm text-slate-200 hover:border-brand-500" data-ok="${o===c.answer}">${escapeHtml(o)}</button>`).join('')}</div><button id="exitExam" class="mt-5 text-xs text-slate-500">Exit exam</button></div>`;
-              overlay.querySelectorAll('.examOpt').forEach(b=>b.onclick=()=>{if(b.dataset.ok==='true')score++; i++; if(i<qs.length) render(); else finish();});
-              overlay.querySelector('#exitExam').onclick=()=>overlay.remove();
-            }
-            function finish(){
-              const pct=Math.round(score/qs.length*100); userState.quizHistory.push({date:new Date().toISOString(),score:pct,correct:score,total:qs.length,type:'Exam Mode'}); userState.dailyChallenge.done=Math.min(2,(userState.dailyChallenge.done||0)+1); savePro(); overlay.innerHTML=`<div class="w-full max-w-md glass-panel p-8 rounded-3xl text-center"><div class="text-4xl font-black text-brand-400">${pct}%</div><p class="text-sm text-white mt-2">${score}/${qs.length} correct</p><button id="closeExam" class="mt-6 px-4 py-2 rounded-xl bg-brand-600 text-white text-xs font-bold">Back to StudyCraft</button></div>`; overlay.querySelector('#closeExam').onclick=()=>overlay.remove(); renderAdvancedDashboard(); }
-            document.body.appendChild(overlay); render();
+            if(!activeQuizQuestions.length) generateQuizFromMaterial();
+            const qs=(activeQuizQuestions||[]).slice(0,20); if(qs.length<2){toast('Generate a material-based quiz first.','error');return;}
+            const count=Math.min(qs.length,Number(prompt(`How many questions? (2-${qs.length})`))||Math.min(10,qs.length)); const selected=[...qs].sort(()=>Math.random()-.5).slice(0,count);
+            const overlay=document.createElement('div'); overlay.className='fixed inset-0 z-[90] bg-slate-950/95 flex items-center justify-center p-4'; let i=0,score=0;
+            const finish=()=>{const pct=Math.round(score/selected.length*100);userState.quizHistory.push({date:new Date().toISOString(),score:pct,correct:score,total:selected.length,type:'Exam Mode',sourceName:selected[0]?.sourceName||'Material'});savePro();overlay.innerHTML=`<div class="study-modal-card max-w-md text-center"><div class="text-5xl font-black text-brand-400">${pct}%</div><p class="text-sm text-white mt-2">${score}/${selected.length} correct</p><p class="text-xs text-slate-400 mt-2">Result saved to analytics.</p><button id="closeExam" class="mt-6 px-4 py-2 rounded-xl bg-brand-600 text-white text-xs font-bold">Back to StudyCraft</button></div>`;overlay.querySelector('#closeExam').onclick=()=>overlay.remove();renderAdvancedDashboard();};
+            const render=()=>{const q=selected[i];const opts=q.options||[q.correctAnswer];overlay.innerHTML=`<div class="study-modal-card"><div class="flex justify-between text-xs text-slate-400"><span>Exam ${i+1}/${selected.length}</span><span>${escapeHtml(q.sourceName||'Study material')}</span></div><h2 class="text-xl font-bold text-white mt-5">${escapeHtml(q.question)}</h2><div class="grid gap-3 mt-6">${opts.map(o=>`<button class="examOpt text-left p-4 rounded-xl bg-slate-900 border border-slate-700 text-sm text-slate-200 hover:border-brand-500" data-ok="${o===q.correctAnswer}">${escapeHtml(o)}</button>`).join('')}</div><button id="exitExam" class="mt-5 text-xs text-slate-500">Exit exam</button></div>`;overlay.querySelectorAll('.examOpt').forEach(b=>b.onclick=()=>{if(b.dataset.ok==='true')score++;i++;i<selected.length?render():finish();});overlay.querySelector('#exitExam').onclick=()=>overlay.remove();};
+            document.body.appendChild(overlay);render();
         }
         function startWrittenPractice(){
-            const cards=(userState.cards||[]).filter(c=>c.question&&c.answer); if(!cards.length){toast('Add study material first.','error');return;}
-            const c=cards[Math.floor(Math.random()*cards.length)]; const answer=prompt(c.question+'\n\nType your answer:'); if(answer===null)return;
-            const expected=(c.answer||'').toLowerCase(), spoken=answer.toLowerCase(); const keywords=expected.split(/[^a-z0-9]+/).filter(w=>w.length>4).slice(0,12); const hits=keywords.filter(k=>spoken.includes(k)).length; const coverage=keywords.length?Math.round(hits/keywords.length*100):0;
-            alert(`Local feedback\n\nKey concept coverage: ${coverage}%\n\nExpected answer:\n${c.answer}\n\nThis is a keyword-based check, not AI marking.`);
+            const source=userState.materialLibrary?.at(-1)?.text||document.getElementById('rawNotesInput')?.value||''; const facts=materialFacts(source); if(!facts.length){toast('Upload study material first.','error');return;}
+            const fact=facts[Math.floor(Math.random()*facts.length)]; const built=makeMaterialQuestion(fact); const answer=prompt(`Written-answer practice\n\n${built.question}\n\nType your answer:`); if(answer===null)return;
+            const expected=normalizedAnswer(built.answer).toLowerCase(), spoken=answer.toLowerCase(); const keywords=[...quizTokens(expected)].filter(w=>w.length>4).slice(0,16); const hits=keywords.filter(k=>spoken.includes(k)).length; const coverage=keywords.length?Math.round(hits/keywords.length*100):0;
+            alert(`Local feedback\n\nKey concept coverage: ${coverage}%\nMatched concepts: ${hits}/${keywords.length}\n\nSource-grounded answer:\n${built.answer}\n\nThis is source-keyword feedback, not AI marking.`);
         }
         function startMission(){
             const due=getDueCards(); if(due.length){currentCardIndex=(userState.cards||[]).indexOf(due[0]);isFlipped=false;document.querySelector('[data-tab="tab-flashcards"]')?.click();updateCardDisplay();userState.dailyChallenge.done=Math.min(2,(userState.dailyChallenge.done||0)+1);savePro();}
             else {document.querySelector('[data-tab="tab-quiz"]')?.click();toast("No due cards — complete a quiz for today's second task.");}
         }
-        function aiTutorLocal(){
-            const c=userState.cards?.[currentCardIndex]; if(!c){toast('Open a flashcard first.');return;}
-            const words=(c.answer||'').split(/\s+/).filter(w=>w.length>4).slice(0,8);
-            alert(`StudyCraft Tutor (local mode)\n\nTopic: ${c.question}\n\nKey ideas to remember:\n• ${words.join('\n• ')}\n\nTry explaining the answer in your own words, then use the spoken-answer tool or written practice.\n\nNote: this is a local tutor, not a connected AI model.`);
+        async function aiTutorLocal(){
+            const c=userState.cards?.[currentCardIndex]; const material=userState.materialLibrary?.at(-1)?.text||''; if(!c&&!material){toast('Open a card or upload material first.','error');return;}
+            ensureProState(); const settings=userState.aiSettings||{};
+            if(settings.endpoint){
+                try{const res=await fetch(settings.endpoint,{method:'POST',headers:{'Content-Type':'application/json',...(settings.apiKey?{'Authorization':`Bearer ${settings.apiKey}`}:{})},body:JSON.stringify({model:settings.model||'gpt-4o-mini',messages:[{role:'system',content:'You are a Grade 8 study tutor. Use only the supplied study material. Explain clearly, do not invent unsupported facts, and ask one short check-for-understanding question.'},{role:'user',content:`Study material:
+${material.slice(0,12000)}
+
+Current card:
+${c?c.question+'\n'+c.answer:''}`}]})});if(!res.ok)throw new Error(`AI request failed (${res.status})`);const data=await res.json();const reply=data.choices?.[0]?.message?.content||data.output_text||data.response||JSON.stringify(data);alert(`AI Study Tutor\n\n${reply}`);return;}catch(e){toast(e.message||'AI connection failed. Using local tutor instead.','error');}}
+            const topic=c?.question||'Current material';const words=(c?.answer||material).split(/\s+/).filter(w=>w.length>4).slice(0,10);alert(`StudyCraft Tutor (local mode)\n\nTopic: ${topic}\n\nKey ideas to remember:\n• ${words.join('\n• ')}\n\nConfigure a connected endpoint in Study Center for a real AI tutor.`);
         }
         function editCard(id){
             const c=userState.cards.find(x=>x.id===id); if(!c)return;
@@ -2017,11 +2061,25 @@
         function exportAllStudyData(){
             const blob=new Blob([JSON.stringify(userState,null,2)],{type:'application/json'}); const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`studycraft_full_backup_${new Date().toISOString().slice(0,10)}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
         }
+        function makeStudyCenter(){
+            const dash=document.getElementById('tab-dashboard');if(!dash||document.getElementById('studyCenterPanel'))return;const panel=document.createElement('div');panel.id='studyCenterPanel';panel.className='glass-panel p-5 rounded-2xl';
+            panel.innerHTML=`<div class="flex flex-wrap items-center justify-between gap-3"><div><h3 class="font-bold text-sm text-white"><i class="fa-solid fa-graduation-cap text-brand-500 mr-2"></i>Study Center</h3><p class="text-xs text-slate-400 mt-1">Organization, planning, card management, AI and offline installation.</p></div><div class="flex flex-wrap gap-2"><button id="openPlannerCenter" class="study-mini-btn">Study Planner</button><button id="openCardManager" class="study-mini-btn">Card Manager</button><button id="openTutorSettings" class="study-mini-btn">AI Tutor</button><button id="installPwaBtn" class="study-mini-btn">Install App</button></div></div><div class="study-hub-grid mt-4"><div class="glass-card p-4 rounded-xl"><h4 class="text-xs font-bold text-white">Subject & Chapter</h4><p class="text-[11px] text-slate-400 mt-1">New imports use this organization.</p><div class="grid grid-cols-2 gap-2 mt-3"><input id="centerSubject" placeholder="Subject" class="rounded-lg bg-slate-900 border border-slate-700 p-2 text-xs text-white"><input id="centerChapter" placeholder="Chapter / topic" class="rounded-lg bg-slate-900 border border-slate-700 p-2 text-xs text-white"></div><button id="saveStudyOrg" class="study-mini-btn mt-2">Save</button></div><div class="glass-card p-4 rounded-xl"><h4 class="text-xs font-bold text-white">Study Planner</h4><div id="plannerSummary" class="text-[11px] text-slate-400 mt-2"></div></div><div class="glass-card p-4 rounded-xl"><h4 class="text-xs font-bold text-white">AI Tutor</h4><p id="aiStatus" class="text-[11px] text-slate-400 mt-2"></p><button id="askTutorBtn" class="study-mini-btn mt-2">Ask Tutor</button></div><div class="glass-card p-4 rounded-xl"><h4 class="text-xs font-bold text-white">Offline / PWA</h4><p id="pwaStatus" class="text-[11px] text-slate-400 mt-2"></p></div></div>`;
+            dash.appendChild(panel);document.getElementById('centerSubject').value=userState.studySettings?.subject||'';document.getElementById('centerChapter').value=userState.studySettings?.chapter||'';document.getElementById('saveStudyOrg').onclick=()=>{userState.studySettings.subject=document.getElementById('centerSubject').value.trim();userState.studySettings.chapter=document.getElementById('centerChapter').value.trim();savePro();toast('Study organization saved.','success');};document.getElementById('openPlannerCenter').onclick=showPlannerModal;document.getElementById('openCardManager').onclick=showCardManager;document.getElementById('openTutorSettings').onclick=showTutorSettings;document.getElementById('askTutorBtn').onclick=aiTutorLocal;document.getElementById('installPwaBtn').onclick=installStudyCraft;updatePlannerSummary();updateAIStatus();updatePWAStatus();
+        }
+        function updatePlannerSummary(){const el=document.getElementById('plannerSummary');if(!el)return;const p=userState.planner||[];if(!p.length){el.textContent='No plan yet.';return;}const x=p[p.length-1];el.textContent=`${x.examDate} • ${(x.topics||[]).length} topics • ${Math.max(0,Math.ceil((new Date(x.examDate)-new Date())/86400000))} days left`}
+        function showPlannerModal(){ensureProState();const m=document.createElement('div');m.className='study-modal show';m.innerHTML=`<div class="study-modal-card"><div class="flex justify-between"><h3 class="text-lg font-bold text-white">Study Planner</h3><button class="closeHub text-slate-400">✕</button></div><p class="text-xs text-slate-400 mt-1">Plan revision around an exam date.</p><div class="grid md:grid-cols-2 gap-3 mt-4"><input id="planDate" type="date" class="rounded-xl bg-slate-900 border border-slate-700 p-3 text-sm text-white"><input id="planMinutes" type="number" min="10" max="240" value="30" class="rounded-xl bg-slate-900 border border-slate-700 p-3 text-sm text-white"></div><textarea id="planTopics" rows="5" class="w-full mt-3 rounded-xl bg-slate-900 border border-slate-700 p-3 text-sm text-white" placeholder="One topic per line or comma separated"></textarea><button id="savePlanModal" class="mt-3 px-4 py-2 rounded-xl bg-brand-600 text-white text-xs font-bold">Create Plan</button><div id="existingPlans" class="mt-5 space-y-2"></div></div>`;document.body.appendChild(m);m.querySelector('.closeHub').onclick=()=>m.remove();m.querySelector('#existingPlans').innerHTML=(userState.planner||[]).slice(-5).reverse().map(x=>`<div class="p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300"><b>${escapeHtml(x.examDate)}</b> • ${(x.topics||[]).map(escapeHtml).join(', ')}</div>`).join('');m.querySelector('#savePlanModal').onclick=()=>{const d=m.querySelector('#planDate').value,t=m.querySelector('#planTopics').value.split(/[,\n]/).map(x=>x.trim()).filter(Boolean),mins=Number(m.querySelector('#planMinutes').value)||30;if(!d||!t.length){toast('Add an exam date and topics.','error');return;}userState.planner.push({id:'plan_'+Date.now(),examDate:d,topics:t,dailyMinutes:mins,createdAt:new Date().toISOString()});savePro();m.remove();updatePlannerSummary();toast('Study plan created.','success');};}
+        function showCardManager(){ensureProState();const m=document.createElement('div');m.className='study-modal show';m.innerHTML=`<div class="study-modal-card"><div class="flex justify-between"><div><h3 class="text-lg font-bold text-white">Card Preview & Manager</h3><p class="text-xs text-slate-400">Search, preview, edit and delete cards.</p></div><button class="closeHub text-slate-400">✕</button></div><div class="flex gap-2 mt-4"><input id="cardFilter" placeholder="Search cards…" class="flex-1 rounded-xl bg-slate-900 border border-slate-700 p-3 text-xs text-white"><select id="cardSubjectFilter" class="rounded-xl bg-slate-900 border border-slate-700 p-3 text-xs text-white"><option value="">All subjects</option>${deriveSubjects().map(([x])=>`<option>${escapeHtml(x)}</option>`).join('')}</select></div><div id="cardManagerList" class="space-y-2 mt-4"></div></div>`;document.body.appendChild(m);m.querySelector('.closeHub').onclick=()=>m.remove();const render=()=>{const q=m.querySelector('#cardFilter').value.toLowerCase(),sub=m.querySelector('#cardSubjectFilter').value;const list=userState.cards.filter(c=>(!q||`${c.question} ${c.answer}`.toLowerCase().includes(q))&&(!sub||c.subject===sub));m.querySelector('#cardManagerList').innerHTML=list.slice(0,100).map(c=>`<div class="p-3 rounded-xl bg-slate-900 border border-slate-800"><div class="text-xs font-bold text-white">${escapeHtml(c.question)}</div><div class="text-[11px] text-slate-400 mt-1">${escapeHtml(c.answer)}</div><div class="flex gap-2 mt-2"><button class="study-mini-btn" data-edit="${escapeAttr(c.id)}">Edit</button><button class="study-mini-btn" data-delete="${escapeAttr(c.id)}">Delete</button><span class="text-[10px] text-slate-500 ml-auto">${escapeHtml(c.subject||'General')} ${c.topic?'• '+escapeHtml(c.topic):''}</span></div></div>`).join('')||'<p class="text-xs text-slate-500">No matching cards.</p>';m.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{editCard(b.dataset.edit);render();});m.querySelectorAll('[data-delete]').forEach(b=>b.onclick=()=>{deleteCard(b.dataset.delete);render();});};m.querySelector('#cardFilter').oninput=render;m.querySelector('#cardSubjectFilter').onchange=render;render();}
+        function showTutorSettings(){ensureProState();const m=document.createElement('div');m.className='study-modal show';m.innerHTML=`<div class="study-modal-card max-w-xl"><div class="flex justify-between"><h3 class="text-lg font-bold text-white">Real AI Tutor Connection</h3><button class="closeHub text-slate-400">✕</button></div><p class="text-xs text-slate-400 mt-2">Optional OpenAI-compatible/custom endpoint. Keys are stored only in this browser; do not use secrets in a shared/public HTML file.</p><input id="aiEndpoint" placeholder="https://your-server.example/v1/chat/completions" class="w-full mt-4 rounded-xl bg-slate-900 border border-slate-700 p-3 text-xs text-white"><input id="aiModel" placeholder="Model name" class="w-full mt-2 rounded-xl bg-slate-900 border border-slate-700 p-3 text-xs text-white"><input id="aiKey" type="password" placeholder="Optional API key" class="w-full mt-2 rounded-xl bg-slate-900 border border-slate-700 p-3 text-xs text-white"><button id="saveAISettings" class="mt-3 px-4 py-2 rounded-xl bg-brand-600 text-white text-xs font-bold">Save</button></div>`;document.body.appendChild(m);m.querySelector('#aiEndpoint').value=userState.aiSettings.endpoint||'';m.querySelector('#aiModel').value=userState.aiSettings.model||'';m.querySelector('#aiKey').value=userState.aiSettings.apiKey||'';m.querySelector('.closeHub').onclick=()=>m.remove();m.querySelector('#saveAISettings').onclick=()=>{userState.aiSettings={endpoint:m.querySelector('#aiEndpoint').value.trim(),model:m.querySelector('#aiModel').value.trim()||'gpt-4o-mini',apiKey:m.querySelector('#aiKey').value};savePro();m.remove();updateAIStatus();toast('AI tutor settings saved.','success');};}
+        function updateAIStatus(){const el=document.getElementById('aiStatus');if(el)el.textContent=userState.aiSettings?.endpoint?'Connected endpoint configured.':'No AI endpoint configured — local tutor available.';}
+        async function installStudyCraft(){if(window.__studyCraftInstallPrompt){window.__studyCraftInstallPrompt.prompt();const r=await window.__studyCraftInstallPrompt.userChoice;window.__studyCraftInstallPrompt=null;toast(r.outcome==='accepted'?'Install accepted.':'Install dismissed.');}else alert('To install offline/PWA, serve the StudyCraft folder over localhost or HTTPS and choose Install App in the browser.');}
+        function updatePWAStatus(){const el=document.getElementById('pwaStatus');if(!el)return;el.textContent=location.protocol==='file:'?'PWA files included; use localhost/HTTPS to enable installation.':('serviceWorker' in navigator?'Offline/PWA support available.':'Service workers are not supported here.');}
+        window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();window.__studyCraftInstallPrompt=e;updatePWAStatus();});
+
         function initProSuite(){
-            ensureProState(); makeMaterialsTools(); renderProSuite(); renderSavedNotes();
+            ensureProState(); makeMaterialsTools(); makeStudyCenter(); renderProSuite(); renderSavedNotes();
             document.getElementById('startExamBtn')?.addEventListener('click',startExamMode);
             document.getElementById('mistakeBtn')?.addEventListener('click',showMistakeBank);
-            document.getElementById('plannerBtn')?.addEventListener('click',showPlanner);
+            document.getElementById('plannerBtn')?.addEventListener('click',showPlannerModal);
             document.getElementById('addSubjectBtn')?.addEventListener('click',addSubject);
             document.getElementById('writtenPracticeBtn')?.addEventListener('click',startWrittenPractice);
             document.getElementById('missionBtn')?.addEventListener('click',startMission);
@@ -2032,6 +2090,7 @@
 
         function enhanceStudyCraft() {
             ensureUserStateShape();
+            if('serviceWorker' in navigator && location.protocol!=='file:'){navigator.serviceWorker.register('./studycraft-sw.js').catch(()=>{});}
             // Normalize streak state for profiles opened after a long gap.
             if (userState.profile.lastActiveDate) {
                 const today = new Date().toISOString().split('T')[0];
