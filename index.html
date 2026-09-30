@@ -48,6 +48,7 @@
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <style>
         /* Custom Styles & Scrollbars */
         ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -1339,31 +1340,114 @@
             return true;
         }
 
+        let ocrWorkerPromise = null;
+
+        async function getOCRWorker() {
+            if (!window.Tesseract) throw new Error('OCR engine failed to load. Check your internet connection and reload the app.');
+            if (!ocrWorkerPromise) {
+                ocrWorkerPromise = Tesseract.createWorker('eng', 1, {
+                    logger: m => {
+                        if (m.status === 'recognizing text' && Number.isFinite(m.progress)) {
+                            window.__ocrProgress = Math.round(m.progress * 100);
+                        }
+                    }
+                });
+            }
+            return await ocrWorkerPromise;
+        }
+
+        async function ocrCanvas(canvas, label='image') {
+            const worker = await getOCRWorker();
+            const result = await worker.recognize(canvas);
+            const text = result?.data?.text || '';
+            return text.trim();
+        }
+
+        async function ocrPdfPage(page, scale=1.7) {
+            const viewport = page.getViewport({scale});
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.ceil(viewport.width);
+            canvas.height = Math.ceil(viewport.height);
+            const ctx = canvas.getContext('2d', {willReadFrequently:true});
+            await page.render({canvasContext:ctx, viewport}).promise;
+            return await ocrCanvas(canvas, 'PDF page');
+        }
+
+        async function ocrPptxImages(zip, mediaNames) {
+            const chunks = [];
+            for (let i=0; i<mediaNames.length; i++) {
+                const name = mediaNames[i];
+                const entry = zip.files[name];
+                if (!entry || entry.dir) continue;
+                const lower = name.toLowerCase();
+                if (!/\.(png|jpe?g|webp|bmp)$/i.test(lower)) continue;
+                toast(`Reading PowerPoint images ${i+1}/${mediaNames.length}…`);
+                try {
+                    const blob = await entry.async('blob');
+                    const url = URL.createObjectURL(blob);
+                    const img = await new Promise((resolve,reject)=>{
+                        const im = new Image();
+                        im.onload=()=>resolve(im);
+                        im.onerror=reject;
+                        im.src=url;
+                    });
+                    const maxWidth = 1800;
+                    const scale = Math.min(1, maxWidth / img.naturalWidth);
+                    const canvas = document.createElement('canvas');
+                    canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+                    canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+                    canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+                    const text = await ocrCanvas(canvas, name);
+                    if (text) chunks.push(`[Image: ${name.split('/').pop()}]\n${text}`);
+                    URL.revokeObjectURL(url);
+                } catch(e) {
+                    console.warn('Could not OCR PowerPoint image', name, e);
+                }
+            }
+            return chunks.join('\n');
+        }
+
         async function processUploadedFile(file) {
             try {
-                if (file.type === 'text/plain' || file.name.toLowerCase().endsWith('.txt')) {
+                const lowerName = file.name.toLowerCase();
+                if (file.type === 'text/plain' || lowerName.endsWith('.txt')) {
                     const text = await file.text();
                     document.getElementById('rawNotesInput').value = text;
                     extractConceptsFromText(text);
                     toast(`Processed ${file.name}`, 'success');
                     return;
                 }
-                if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+                if (file.type === 'application/pdf' || lowerName.endsWith('.pdf')) {
                     if (!window.pdfjsLib) throw new Error('PDF engine failed to load.');
                     const pdf = await pdfjsLib.getDocument({data: await file.arrayBuffer()}).promise;
                     let text = '';
+                    let pagesWithText = 0;
                     for (let pageNo=1; pageNo<=pdf.numPages; pageNo++) {
                         const page = await pdf.getPage(pageNo);
                         const content = await page.getTextContent();
-                        text += content.items.map(x => x.str).join(' ') + '\n';
+                        const pageText = content.items.map(x => x.str).join(' ').trim();
+                        if (pageText) { pagesWithText++; text += pageText + '\n'; }
                     }
-                    if (!text.trim()) throw new Error('No selectable text was found in this PDF.');
+                    // If the PDF is scanned/image-only, render and OCR each page.
+                    if (pagesWithText < pdf.numPages || !text.trim()) {
+                        toast(`OCR: scanning ${pdf.numPages} PDF page(s)…`);
+                        let ocrText = '';
+                        for (let pageNo=1; pageNo<=pdf.numPages; pageNo++) {
+                            toast(`OCR: reading PDF page ${pageNo}/${pdf.numPages}…`);
+                            const page = await pdf.getPage(pageNo);
+                            const pageText = await ocrPdfPage(page);
+                            if (pageText) ocrText += pageText + '\n';
+                        }
+                        // Keep normal PDF text and add OCR output, avoiding an empty result.
+                        text = [text.trim(), ocrText.trim()].filter(Boolean).join('\n\n');
+                    }
+                    if (!text.trim()) throw new Error('No readable text could be extracted or OCRed from this PDF.');
                     document.getElementById('rawNotesInput').value = text.trim();
                     extractConceptsFromText(text);
-                    toast(`Extracted ${pdf.numPages} PDF page(s)`, 'success');
+                    toast(`Processed ${pdf.numPages} PDF page(s) with text + OCR`, 'success');
                     return;
                 }
-                if (file.name.toLowerCase().endsWith('.pptx')) {
+                if (lowerName.endsWith('.pptx')) {
                     if (!window.JSZip) throw new Error('PPTX parser failed to load.');
                     const zip = await JSZip.loadAsync(await file.arrayBuffer());
                     const slideNames = Object.keys(zip.files).filter(n => /^ppt\/slides\/slide\d+\.xml$/i.test(n)).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
@@ -1371,17 +1455,22 @@
                     for (const name of slideNames) {
                         const xml=await zip.files[name].async('text');
                         const doc=new DOMParser().parseFromString(xml,'application/xml');
-                        const parts=[...doc.getElementsByTagName('a:t')].map(n=>n.textContent);
+                        const parts=[...doc.getElementsByTagName('a:t')].map(n=>n.textContent).filter(Boolean);
                         if(parts.length) text += parts.join(' ') + '\n';
                     }
-                    if(!text.trim()) throw new Error('No readable text was found in this PowerPoint.');
+                    // OCR embedded slide images as well, so screenshots/scanned worksheets inside PPTX are readable.
+                    const mediaNames = Object.keys(zip.files).filter(n => /^ppt\/media\//i.test(n));
+                    const ocrText = mediaNames.length ? await ocrPptxImages(zip, mediaNames) : '';
+                    text = [text.trim(), ocrText.trim()].filter(Boolean).join('\n\n');
+                    if(!text.trim()) throw new Error('No readable text or OCR text was found in this PowerPoint.');
                     document.getElementById('rawNotesInput').value=text.trim();
                     extractConceptsFromText(text);
-                    toast(`Extracted ${slideNames.length} slide(s)`, 'success');
+                    toast(`Processed ${slideNames.length} slide(s) + ${mediaNames.length} image(s)`, 'success');
                     return;
                 }
-                throw new Error('Unsupported file type.');
+                throw new Error('Unsupported file type. Please upload PDF, PPTX, or TXT.');
             } catch (err) {
+                console.error(err);
                 toast(err.message || 'Could not process that file.', 'error');
             }
         }
