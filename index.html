@@ -341,7 +341,7 @@
                         <div class="glass-card p-4 rounded-xl"><p class="text-[11px] text-slate-400">Cards</p><p id="statTotalCards" class="text-2xl font-extrabold text-white">0</p></div>
                         <div class="glass-card p-4 rounded-xl"><p class="text-[11px] text-slate-400">Due Today</p><p id="statDueCards" class="text-2xl font-extrabold text-accent-amber">0</p></div>
                         <div class="glass-card p-4 rounded-xl"><p class="text-[11px] text-slate-400">Retention</p><p id="statRetention" class="text-2xl font-extrabold text-accent-emerald">0%</p></div>
-                        <div class="glass-card p-4 rounded-xl"><p class="text-[11px] text-slate-400">Reviews</p><p id="statReviews" class="text-2xl font-extrabold text-brand-500">0</p></div>
+                        <div class="glass-card p-4 rounded-xl"><p class="text-[11px] text-slate-400">Reviews</p><p id="statReviews" class="text-2xl font-extrabold text-brand-500">0</p></div><div class="glass-card p-4 rounded-xl"><p class="text-[11px] text-slate-400">Materials</p><p id="statMaterials" class="text-2xl font-extrabold text-accent-cyan">0</p></div>
                         <div class="glass-card p-4 rounded-xl"><p class="text-[11px] text-slate-400">Quiz Avg.</p><p id="statQuizAvg" class="text-2xl font-extrabold text-accent-purple">0%</p></div>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
@@ -375,6 +375,18 @@
                         <div class="h-px bg-slate-800 flex-1"></div>
                         <span class="text-xs text-slate-500 font-semibold uppercase">Or Paste Text Notes</span>
                         <div class="h-px bg-slate-800 flex-1"></div>
+                    </div>
+
+                    <!-- Material organization -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+                        <div>
+                            <label class="block text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-1">Subject</label>
+                            <input id="materialSubject" placeholder="e.g. History" class="w-full glass-card rounded-xl p-3 text-xs text-slate-200 border border-slate-700 focus:border-brand-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-1">Chapter / Topic</label>
+                            <input id="materialChapter" placeholder="e.g. World War I" class="w-full glass-card rounded-xl p-3 text-xs text-slate-200 border border-slate-700 focus:border-brand-500 outline-none">
+                        </div>
                     </div>
 
                     <!-- Manual Text Area -->
@@ -762,6 +774,7 @@
 
         function saveActiveUserData() {
             if (!userState || !activeUserId) return;
+            if (typeof ensureUserStateShape === 'function') ensureUserStateShape();
             localStorage.setItem(`studycraft_data_${activeUserId}`, JSON.stringify(userState));
             // Sync index avatar/title if changed
             const idx = usersIndex.findIndex(u => u.id === activeUserId);
@@ -864,18 +877,24 @@
 
         function recordActivity(xpGain = 10) {
             if (!userState) return;
+            ensureUserStateShape();
             const today = new Date().toISOString().split('T')[0];
             const last = userState.profile.lastActiveDate;
             if (last !== today) {
                 const prev = last ? new Date(last + 'T00:00:00') : null;
                 const now = new Date(today + 'T00:00:00');
                 const days = prev ? Math.round((now - prev) / 86400000) : 999;
-                if (days === 1) userState.profile.streak = Math.max(1, userState.profile.streak || 1) + 1;
+                if (days === 1) userState.profile.streak = Math.max(1, Number(userState.profile.streak) || 1) + 1;
                 else if (days > 1) userState.profile.streak = 1;
+                // Roll the 28-day activity window by the exact number of days
+                // rather than shifting once after a long gap.
+                if (!Array.isArray(userState.activityHeatmap) || userState.activityHeatmap.length !== 28) {
+                    userState.activityHeatmap = Array(28).fill(0);
+                }
+                const shifts = Math.min(28, Math.max(1, Number.isFinite(days) ? days : 1));
+                for (let i = 0; i < shifts; i++) userState.activityHeatmap.shift();
+                while (userState.activityHeatmap.length < 28) userState.activityHeatmap.unshift(0);
                 userState.profile.lastActiveDate = today;
-                if (!Array.isArray(userState.activityHeatmap)) userState.activityHeatmap = Array(28).fill(0);
-                userState.activityHeatmap.shift();
-                userState.activityHeatmap.push(0);
             }
             userState.profile.xp += Math.max(0, Number(xpGain) || 0);
             userState.activityHeatmap[userState.activityHeatmap.length - 1] += 1;
@@ -977,10 +996,20 @@
             reader.onload = (evt) => {
                 try {
                     const imported = JSON.parse(evt.target.result);
-                    if (imported && imported.profile && imported.profile.id) {
+                    if (imported && imported.profile) {
                         userState = imported;
+                        // A backup belongs to the currently selected local account.
+                        // Never let an imported profile silently change which storage key owns it.
+                        userState.profile ||= {};
+                        userState.profile.id = activeUserId;
+                        ensureUserStateShape();
                         saveActiveUserData();
-                        alert("Account profile imported successfully!");
+                        renderUserProfileUI();
+                        renderGoalsUI();
+                        renderHeatmapUI();
+                        updateCardDisplay();
+                        renderAdvancedDashboard();
+                        toast("Account backup imported successfully.", "success");
                     }
                 } catch(err) {
                     alert("Invalid JSON backup file.");
@@ -998,156 +1027,183 @@
                 alert("Please paste text notes or upload a file first.");
                 return;
             }
+            currentImportSourceName = 'Pasted material';
             extractConceptsFromText(text);
         });
 
         let currentImportSourceName = "";
         function extractConceptsFromText(text) {
-            const meta=inferSubjectAndTopic(currentImportSourceName);
-
-            // Improved study-card extraction: preserve slide/line structure,
-            // split long OCR/PPT text into atomic facts, and avoid giant cards.
+            const meta = inferSubjectAndTopic(currentImportSourceName);
             const termsContainer = document.getElementById('extractedTermsContainer');
-            termsContainer.innerHTML = '';
+            if (termsContainer) termsContainer.innerHTML = '';
 
-            const clean = String(text || '')
-                .replace(/\r/g, '')
-                .replace(/[\u00a0\u200b]/g, ' ')
-                .replace(/https?:\/\/\S+/gi, '')
-                .replace(/\s+/g, ' ')
-                .trim();
+            const raw = String(text || '').replace(/\r/g, '').replace(/[\u00a0\u200b]/g, ' ');
+            if (!raw.trim()) return;
 
-            if (!clean) return;
-
-            // Reconstruct useful boundaries from OCR/PPT text where possible.
-            // A line/slide separator is preferable to treating an entire upload
-            // as one sentence.
-            const rawLines = String(text || '')
-                .replace(/\r/g, '')
-                .split(/\n+/)
+            // Keep slide/page/line boundaries as long as possible. This prevents a
+            // whole presentation from becoming one giant flashcard.
+            const lines = raw.split(/\n+/)
                 .map(x => x.replace(/https?:\/\/\S+/gi, '').trim())
                 .filter(Boolean);
-
             const candidates = [];
-            const pushCandidate = (value) => {
-                let v = value.replace(/\s+/g, ' ').trim();
-                v = v.replace(/^[•·▪◦\-–—]+\s*/, '').trim();
-                if (!v || v.length < 8) return;
-                // Ignore obvious navigation/noise lines.
-                if (/^(click card to flip|box \d+|due|https?:\/\/)/i.test(v)) return;
-                if (/^[\d\s]+$/.test(v)) return;
-                candidates.push(v);
+            // Join common heading + event lines (e.g. "World War I" + "Started on 28th July 1914").
+            // This gives the question generator the subject it needs for date questions.
+            const mergedLines=[];
+            for(let i=0;i<lines.length;i++){
+                const cur=lines[i], next=lines[i+1]||'';
+                if(cur.length<=90 && !/[.!?]$/.test(cur) && /^(started|began|ended|signed|declared|invaded|occurred|founded|launched)\b/i.test(next)){
+                    mergedLines.push(`${cur} ${next}`); i++;
+                } else mergedLines.push(cur);
+            }
+            const push = (value, sourceIndex = 0) => {
+                let v = String(value || '').replace(/\s+/g, ' ').trim();
+                v = v.replace(/^[•·▪◦\-*–—]+\s*/, '').trim();
+                if (!v || v.length < 10) return;
+                if (/^(click card to flip|box\s+\d+|question\s+\d+|slide\s*\d+|page\s*\d+|due|map of europe|\d[\d\s]*)$/i.test(v)) return;
+                candidates.push({ text: v, sourceIndex });
             };
 
-            // First use actual lines. This is especially important for PPTX/PDF OCR.
-            rawLines.forEach(line => {
-                // Split obvious numbered/bulleted facts that were OCR'd onto one line.
-                const pieces = line.split(/(?=(?:\d+\.|[•·▪◦]|[A-Z][A-Z ]{4,}:)\s+)/).filter(Boolean);
-                pieces.forEach(piece => pushCandidate(piece));
-            });
-
-            // If extraction collapsed everything into one line, recover sentence-like units.
-            if (candidates.length <= 2 && clean.length > 180) {
-                clean.split(/(?<=[.!?])\s+|(?<=;)\s+/).forEach(pushCandidate);
-            }
-
-            // Turn long candidates into manageable fact-sized chunks.
-            const facts = [];
-            candidates.forEach(c => {
-                if (c.length <= 260) {
-                    facts.push(c);
-                    return;
-                }
-                // Prefer splitting at commas/semicolons/major connectors.
-                const parts = c.split(/\s*(?:;|(?<!\d),(?=\s+(?:and|but|because|while|which|with|including|Russia|France|Germany|Britain)))\s*/i)
-                    .map(x => x.trim()).filter(x => x.length >= 25);
-                if (parts.length > 1) parts.forEach(x => facts.push(x));
-                else {
-                    // Hard fallback: word chunks, never producing enormous cards.
-                    const words = c.split(/\s+/);
-                    for (let i = 0; i < words.length; i += 38) {
-                        const chunk = words.slice(i, i + 38).join(' ');
-                        if (chunk.length >= 25) facts.push(chunk);
+            let heading='';
+            mergedLines.forEach((line, i) => {
+                if (/^\[(?:slide|page)\s*\d+\]/i.test(line)) { heading=''; return; }
+                const pieces=line.split(/(?=(?:\d+\.\s+|[•·▪◦]\s+))/).filter(Boolean);
+                pieces.forEach(piece=>{
+                    const cleanPiece=piece.replace(/^[•·▪◦\-*–—]+\s*/,'').trim();
+                    if(/^(started|began|ended|signed|declared|invaded|occurred|founded|launched)\b/i.test(cleanPiece) && heading){
+                        push(`${heading} ${cleanPiece}`,i); heading=''; return;
                     }
-                }
-            });
-
-            // Deduplicate while retaining order.
-            const uniqueFacts = [...new Map(facts.map(f => [f.toLowerCase(), f])).values()];
-            const newCards = [];
-
-            uniqueFacts.slice(0, 100).forEach((fact, idx) => {
-                let question = '';
-                let answer = fact;
-
-                // Definition-style material: "X: definition" / "X - definition"
-                const definition = fact.match(/^(.{2,90}?)\s*[:\-–—]\s*(.{15,})$/);
-                if (definition && !/^https?$/i.test(definition[1].trim())) {
-                    const term = definition[1].trim();
-                    answer = definition[2].trim();
-                    question = `What is ${term}?`;
-                } else if (/\b(\d{3,4}|\d{1,2}\s+(?:July|August|September|October|November|December|January|February|March|April|May|June))\b/i.test(fact)) {
-                    // Date-heavy facts are much more useful as recall questions.
-                    const dateMatch = fact.match(/\b\d{1,2}(?:st|nd|rd|th)?\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{3,4}|\b(?:19|20)\d{2}\b/i);
-                    const date = dateMatch ? dateMatch[0] : null;
-                    if (date) question = `What happened on ${date}?`;
-                }
-
-                if (!question) {
-                    // Prefer a recognizable subject/topic instead of the first three words.
-                    const topicMatch = fact.match(/^(World War I|WWI|MAP OF EUROPE|GENERAL INFORMATION ABOUT WWI|The assassination|Russia|France|Germany|Britain|Serbia|Austria[- ]Hungary)\b/i);
-                    const topic = topicMatch ? topicMatch[1] : null;
-                    if (topic && fact.length > topic.length + 8) {
-                        question = `What does this tell us about ${topic}?`;
-                    } else {
-                        question = `What is an important fact about this topic?`;
+                    const isHeading=cleanPiece.length<=90 && !/[.!?]$/.test(cleanPiece) && !/^\d/.test(cleanPiece);
+                    const nextLine=(mergedLines[i+1]||'').replace(/^[•·▪◦\-*–—]+\s*/,'').trim();
+                    if(isHeading && /^(started|began|ended|signed|declared|invaded|occurred|founded|launched)\b/i.test(nextLine)){
+                        heading=cleanPiece; return;
                     }
-                }
-
-                // Keep cards readable. The full fact remains on the back.
-                answer = answer.replace(/\s+/g, ' ').trim();
-                if (answer.length > 500) answer = answer.slice(0, 497).trimEnd() + '…';
-
-                newCards.push({
-                    id: 'card_' + Date.now() + '_' + idx,
-                    question,
-                    answer,
-                    box: 1,
-                    lastReviewed: null,
-                    reviewCount: 0,
-                    reviewHistory: [],
-                    dueAt: null,
-                    source: 'material',
-                    sourceName: currentImportSourceName || 'Pasted material',
-                    subject: meta.subject,
-                    tags: [],
-                    topic: meta.topic
+                    push(cleanPiece,i);
+                    if(isHeading) heading=cleanPiece; else if(cleanPiece.length>90) heading='';
                 });
-
-                const tag = document.createElement('span');
-                tag.className = "px-2.5 py-1 rounded-lg bg-brand-500/10 border border-brand-500/20 text-brand-300 font-medium";
-                tag.innerText = answer.length > 55 ? answer.slice(0, 55) + '…' : answer;
-                termsContainer.appendChild(tag);
             });
 
-            userState.materialLibrary = Array.isArray(userState.materialLibrary) ? userState.materialLibrary : [];
-            userState.studySettings ||= {subject:'',chapter:'',dailyMinutes:30};
-            userState.aiSettings ||= {endpoint:'',apiKey:'',model:'gpt-4o-mini'};
-            userState.materialLibrary.push({ id:'mat_'+Date.now(), title:currentImportSourceName || 'Pasted material', text:String(text || ''), subject:meta.subject, chapter:meta.topic, createdAt:new Date().toISOString() });
-            userState.materialLibrary = userState.materialLibrary.slice(-30);
-            if (newCards.length > 0) {
-                userState.cards.push(...newCards);
-                saveActiveUserData();
-                recordActivity(Math.min(50, 10 + newCards.length * 2));
-                alert(`Extracted ${newCards.length} focused flashcards from your material!`);
-                currentCardIndex = userState.cards.length - newCards.length;
-                isFlipped = false;
-                updateCardDisplay();
-                // Automatically prepare a source-material quiz when enough facts exist.
-                setTimeout(() => generateQuizFromMaterial(), 50);
-            } else {
-                toast('I could not find enough separate facts to make flashcards. Try uploading clearer notes.', 'error');
+            // Recover sentence boundaries if OCR collapsed the document into a few lines.
+            if (candidates.length < 3) {
+                raw.replace(/https?:\/\/\S+/gi, '').split(/(?<=[.!?])\s+/).forEach((x, i) => push(x, i));
             }
+
+            const facts = [];
+            for (const c of candidates) {
+                if (c.text.length <= 360) { facts.push(c); continue; }
+                const parts = c.text.split(/(?<=[.!?;])\s+|\s+(?=because|therefore|as a result|which|while|including)\s+/i);
+                if (parts.length > 1) parts.forEach(x => x.trim().length >= 25 && facts.push({text:x.trim(), sourceIndex:c.sourceIndex}));
+                else {
+                    const words = c.text.split(/\s+/);
+                    for (let i = 0; i < words.length; i += 42) {
+                        const chunk = words.slice(i, i + 42).join(' ').trim();
+                        if (chunk.length >= 25) facts.push({text:chunk, sourceIndex:c.sourceIndex});
+                    }
+                }
+            }
+
+            const seen = new Set();
+            const uniqueFacts = facts.filter(f => {
+                const key = f.text.toLowerCase().replace(/\s+/g, ' ').trim();
+                if (seen.has(key)) return false;
+                seen.add(key); return true;
+            }).slice(0, 120);
+
+            const cards = [];
+            uniqueFacts.forEach((fact, idx) => {
+                const built = buildFlashcardFromFact(fact.text);
+                if (!built || !built.question || !built.answer) return;
+                cards.push({
+                    id: 'card_' + Date.now() + '_' + idx + '_' + Math.random().toString(36).slice(2, 6),
+                    question: built.question,
+                    answer: built.answer.slice(0, 600),
+                    box: 1, lastReviewed: null, reviewCount: 0, reviewHistory: [], ratingHistory: [],
+                    dueAt: null, intervalDays: 1, ease: 2.5, stability: 0, lapses: 0,
+                    source: 'material', sourceName: currentImportSourceName || 'Pasted material',
+                    sourceIndex: fact.sourceIndex, subject: meta.subject, topic: meta.topic, tags: built.tags || []
+                });
+                if (termsContainer) {
+                    const tag = document.createElement('span');
+                    tag.className = 'px-2.5 py-1 rounded-lg bg-brand-500/10 border border-brand-500/20 text-brand-300 font-medium';
+                    tag.textContent = built.question.length > 65 ? built.question.slice(0, 65) + '…' : built.question;
+                    termsContainer.appendChild(tag);
+                }
+            });
+
+            ensureProState();
+            userState.materialLibrary.push({
+                id:'mat_'+Date.now(), title:currentImportSourceName || 'Pasted material', text:raw,
+                subject:meta.subject, chapter:meta.topic, createdAt:new Date().toISOString()
+            });
+            userState.materialLibrary = userState.materialLibrary.slice(-30);
+
+            if (!cards.length) {
+                toast('I could not identify usable facts in this material. Try clearer text or a higher-quality scan.', 'error');
+                return;
+            }
+
+            // Avoid repeatedly importing the exact same material into the same deck.
+            const existingQuestions = new Set(userState.cards.map(c => String(c.question).trim().toLowerCase()));
+            const freshCards = cards.filter(c => !existingQuestions.has(c.question.trim().toLowerCase()));
+            userState.cards.push(...freshCards);
+            // New material becomes the active study space, so subjects never get mixed by default.
+            activeSubjectFilter=meta.subject || 'General';
+            userState.studySettings.activeSubject=activeSubjectFilter;
+            const subjectInput=document.getElementById('materialSubject'); if(subjectInput) subjectInput.value=activeSubjectFilter;
+            renderSubjectWorkspace();
+            savePro();
+            recordActivity(Math.min(50, 10 + freshCards.length * 2));
+            currentCardIndex = Math.max(0, userState.cards.length - freshCards.length);
+            isFlipped = false;
+            updateCardDisplay();
+            toast(`${freshCards.length} new flashcards created from ${currentImportSourceName || 'your material'}.`, 'success');
+            setTimeout(() => generateQuizFromMaterial(), 50);
+        }
+
+        function buildFlashcardFromFact(text) {
+            const t = normalizedAnswer(text).replace(/^\[[^\]]+\]\s*/, '');
+            if (!t || t.length < 10) return null;
+
+            // Definition / label patterns.
+            let m = t.match(/^([^:–—-]{2,90})\s*[:–—-]\s*(.{12,})$/);
+            if (m && m[1].split(/\s+/).length <= 12) {
+                return {question:`What is ${m[1].trim()}?`, answer:m[2].trim(), tags:['definition']};
+            }
+            m = t.match(/^(.{2,90}?)\s+(?:is|are|was|were)\s+(.{12,})$/i);
+            if (m && !/^(everything|there|this|it|they)\b/i.test(m[1])) {
+                return {question:`What is ${m[1].trim()}?`, answer:m[2].replace(/[.]$/,'').trim(), tags:['definition']};
+            }
+
+            // Date/event facts.
+            const date = t.match(/\b\d{1,2}(?:st|nd|rd|th)?\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{3,4}\b|\b(?:19|20)\d{2}\b/i);
+            if (date) {
+                const before=t.slice(0,date.index||0).trim();
+                const eventVerb=before.match(/\b(started|began|ended|signed|declared|invaded|occurred|founded|launched)\b/i);
+                if(eventVerb && eventVerb.index>0){
+                    const subject=before.slice(0,eventVerb.index).trim();
+                    const verb=eventVerb[1].toLowerCase();
+                    if(subject && (verb==='started'||verb==='began')) return {question:`When did ${subject} begin?`,answer:date[0],tags:['date','event']};
+                    if(subject && verb==='ended') return {question:`When did ${subject} end?`,answer:date[0],tags:['date','event']};
+                }
+                if(/\b(started|began|ended|signed|declared|invaded|occurred|founded|launched)\b/i.test(t)) return {question:`What happened on ${date[0]}?`,answer:t,tags:['date','event']};
+            }
+
+            // Cause/effect.
+            m = t.match(/^(.{2,110}?)\s+(because|due to|as a result of|caused|led to)\s+(.{12,})$/i);
+            if (m) { const verb=/led to/i.test(m[2])?'lead to':'cause'; return {question:`What did ${m[1].trim()} ${verb}?`, answer:m[3].replace(/[.]$/,'').trim(), tags:['cause-effect']}; }
+
+            // A source question is an instruction, not a fact. Skip it rather than
+            // creating a card whose answer is "See the source material".
+            if (/^(who|what|when|where|why|how|which)\b/i.test(t) && t.includes('?')) return null;
+
+            // For ordinary facts, create a retrieval prompt from the first clause rather
+            // than the previous meaningless "important fact about this topic" question.
+            const clause = t.split(/[.!?;]/)[0].trim();
+            const words = clause.split(/\s+/);
+            const subject = words.slice(0, Math.min(8, words.length)).join(' ');
+            if (subject.length >= 6 && subject.length < clause.length - 6) {
+                return {question:`What does the material say about “${subject}”?`, answer:t, tags:['fact']};
+            }
+            return {question:'State this fact from the material in your own words.', answer:t, tags:['recall']};
         }
 
         /* ==========================================================================
@@ -1155,6 +1211,74 @@
            ========================================================================== */
         let currentCardIndex = 0;
         let isFlipped = false;
+        let activeSubjectFilter = 'All Subjects';
+
+        function getActiveSubject(){
+            ensureProState();
+            return activeSubjectFilter || userState.studySettings?.activeSubject || 'All Subjects';
+        }
+        function getStudyCards(){
+            const filter=getActiveSubject();
+            const cards=userState?.cards||[];
+            return filter==='All Subjects' ? cards : cards.filter(c => (c.subject||'General')===filter);
+        }
+        function getStudyMaterials(){
+            const filter=getActiveSubject();
+            const mats=userState?.materialLibrary||[];
+            return filter==='All Subjects' ? mats : mats.filter(m => (m.subject||'General')===filter);
+        }
+        function subjectNames(){
+            const names=new Set(['General']);
+            (userState?.subjects||[]).forEach(s=>{if(s?.name)names.add(String(s.name));});
+            (userState?.cards||[]).forEach(c=>names.add(c.subject||'General'));
+            (userState?.materialLibrary||[]).forEach(m=>names.add(m.subject||'General'));
+            return [...names].sort((a,b)=>a.localeCompare(b));
+        }
+        function renderSubjectWorkspace(){
+            ensureProState();
+            const bar=document.getElementById('subjectWorkspaceBar');
+            if(!bar) return;
+            const names=subjectNames();
+            if(!names.includes(activeSubjectFilter) && activeSubjectFilter!=='All Subjects') activeSubjectFilter='All Subjects';
+            const select=bar.querySelector('#workspaceSubjectSelect');
+            if(!select) return;
+            const current=activeSubjectFilter;
+            select.innerHTML='<option value="All Subjects">All Subjects</option>'+names.map(n=>`<option value="${escapeAttr(n)}">${escapeHtml(n)}</option>`).join('');
+            select.value=current;
+            const cards=getStudyCards(); const mats=getStudyMaterials();
+            const label=bar.querySelector('#workspaceSubjectMeta');
+            if(label) label.textContent=`${cards.length} cards • ${mats.length} materials`;
+            const chip=bar.querySelector('#workspaceSubjectName');
+            if(chip) chip.textContent=current;
+        }
+        function setActiveSubject(value){
+            ensureProState();
+            activeSubjectFilter=value||'All Subjects';
+            userState.studySettings.activeSubject=activeSubjectFilter;
+            currentCardIndex=0; isFlipped=false;
+            renderSubjectWorkspace();
+            const ms=document.getElementById('materialSubject'); if(ms && activeSubjectFilter!=='All Subjects') ms.value=activeSubjectFilter;
+            updateCardDisplay();
+            renderAdvancedDashboard();
+            if(typeof renderProSuite==='function') renderProSuite();
+            if(typeof buildMindMap==='function') buildMindMap();
+            toast(activeSubjectFilter==='All Subjects'?'Showing all subjects':`Study space: ${activeSubjectFilter}`,'info');
+            saveActiveUserData();
+        }
+        function makeSubjectWorkspace(){
+            if(document.getElementById('subjectWorkspaceBar')) return;
+            const main=document.querySelector('main'); if(!main) return;
+            const nav=main.querySelector('.lg\:hidden');
+            const bar=document.createElement('div');
+            bar.id='subjectWorkspaceBar';
+            bar.className='glass-panel rounded-2xl px-4 py-3 flex flex-wrap items-center gap-3 sticky top-0 z-20';
+            bar.innerHTML=`<div class="flex items-center gap-2 mr-auto"><i class="fa-solid fa-folder-open text-brand-500"></i><div><div class="text-[10px] uppercase tracking-wider font-bold text-slate-500">Current Study Space</div><div id="workspaceSubjectName" class="text-sm font-bold text-white">All Subjects</div></div></div><select id="workspaceSubjectSelect" aria-label="Current subject" class="rounded-xl bg-slate-900 border border-slate-700 px-3 py-2 text-xs text-white outline-none"></select><span id="workspaceSubjectMeta" class="text-[10px] text-slate-500"></span><button id="workspaceOrganizeBtn" class="study-mini-btn">Organize Cards</button>`;
+            if(nav && nav.parentElement===main) nav.insertAdjacentElement('afterend',bar); else main.prepend(bar);
+            bar.querySelector('#workspaceSubjectSelect').addEventListener('change',e=>setActiveSubject(e.target.value));
+            bar.querySelector('#workspaceOrganizeBtn').addEventListener('click',showCardManager);
+            renderSubjectWorkspace();
+        }
+
 
         function isCardDue(card) {
             return !card.dueAt || new Date(card.dueAt).getTime() <= Date.now();
@@ -1162,23 +1286,24 @@
 
         function getDueCards() {
             ensureUserStateShape();
-            return userState.cards.filter(isCardDue).sort((a,b) => (new Date(a.dueAt || 0)) - (new Date(b.dueAt || 0)));
+            return getStudyCards().filter(isCardDue).sort((a,b) => (new Date(a.dueAt || 0)) - (new Date(b.dueAt || 0)));
         }
 
         function updateReviewQueueStatus() {
             const el=document.getElementById('reviewQueueStatus');
-            if(el) el.innerText=`${getDueCards().length} due now • ${userState.cards.length} total`;
+            if(el) el.innerText=`${getDueCards().length} due now • ${getStudyCards().length} in ${getActiveSubject()}`;
         }
 
         function updateCardDisplay() {
-            if (!userState.cards || userState.cards.length === 0) {
-                document.getElementById('cardContent').innerText = "No cards available. Process notes to create cards.";
+            const visible=getStudyCards();
+            if (!visible.length) {
+                document.getElementById('cardContent').innerText = `No cards in ${getActiveSubject()}. Upload material or switch study space.`;
                 updateReviewQueueStatus();
                 return;
             }
-            if (currentCardIndex >= userState.cards.length) currentCardIndex = 0;
-            const card = userState.cards[currentCardIndex];
-            document.getElementById('cardBoxTag').innerText = `Box ${card.box}${isCardDue(card) ? ' • DUE' : ''}`;
+            let card=userState.cards[currentCardIndex];
+            if(!card || !visible.some(c=>c.id===card.id)){ card=visible[0]; currentCardIndex=userState.cards.indexOf(card); }
+            document.getElementById('cardBoxTag').innerText = `Box ${card.box}${isCardDue(card) ? ' • DUE' : ''} • ${card.subject||'General'}`;
             document.getElementById('cardContent').innerText = isFlipped ? card.answer : card.question;
             document.getElementById('voiceCardText').innerText = `Prompt: ${card.question}`;
             updateReviewQueueStatus();
@@ -1208,7 +1333,7 @@
                 card.reviewHistory=Array.isArray(card.reviewHistory)?card.reviewHistory:[]; card.reviewHistory.push({date:card.lastReviewed,rating,interval:days}); card.reviewHistory=card.reviewHistory.slice(-100);
                 card.previousBox=oldBox;
                 recordActivity(rating===1?5:rating===2?10:rating===3?15:20); isFlipped=false;
-                const due=getDueCards(); const next=due.length?userState.cards.indexOf(due[0]):(currentCardIndex+1)%userState.cards.length; currentCardIndex=next>=0?next:0;
+                const due=getDueCards(); const visible=getStudyCards(); const next=due.length?userState.cards.indexOf(due[0]):(visible.length?userState.cards.indexOf(visible[(visible.findIndex(c=>c.id===card.id)+1)%visible.length]):-1); currentCardIndex=next>=0?next:0;
                 savePro(); updateCardDisplay(); renderAdvancedDashboard();
             });
         });
@@ -1224,7 +1349,7 @@
 
         document.getElementById('generateQuizFromCards')?.addEventListener('click', generateQuizFromMaterial);
 
-        const QUIZ_STOPWORDS = new Set('what is are was were the a an of to in on for from by and or how why when where which who does do did with this that these those explain define give name list describe identify state tell you about according accordingto'.split(/\s+/));
+        const QUIZ_STOPWORDS = new Set('what is are was were the a an of to in on for from by and or how why when where which who does do did with this that these those explain define give name list describe identify state tell you about according accordingto according'.split(/\s+/));
 
         function quizTokens(text) {
             return new Set(String(text || '').toLowerCase()
@@ -1235,170 +1360,143 @@
         }
 
         function tokenSimilarity(a, b) {
-            const A = quizTokens(a), B = quizTokens(b);
-            if (!A.size || !B.size) return 0;
-            let common = 0;
-            A.forEach(x => { if (B.has(x)) common++; });
-            return common / Math.sqrt(A.size * B.size);
+            const A=quizTokens(a), B=quizTokens(b); if(!A.size||!B.size) return 0;
+            let common=0; A.forEach(x=>{if(B.has(x)) common++;});
+            return common/Math.sqrt(A.size*B.size);
         }
-
-        function normalizedAnswer(answer) {
-            return String(answer || '').replace(/\s+/g, ' ').trim();
-        }
+        function normalizedAnswer(answer){ return String(answer||'').replace(/\s+/g,' ').trim(); }
 
         function materialFacts(text) {
-            const raw = String(text || '').replace(/\r/g, '').replace(/https?:\/\/\S+/gi, '');
-            const lines = raw.split(/\n+/).map(x => x.replace(/^[•·▪◦\-*–—]+\s*/, '').trim()).filter(Boolean);
-            const facts = [];
-            const add = (value, index) => {
-                let v = normalizedAnswer(value);
-                if (!v || v.length < 12) return;
-                if (/^(slide\s*\d+|box\s*\d+|click card to flip|question\s*\d+|[\d\s]+)$/i.test(v)) return;
-                // Break very long OCR/PPT lines at sentence boundaries first.
-                const pieces = v.length > 320 ? v.split(/(?<=[.!?;])\s+/) : [v];
-                pieces.forEach(piece => {
-                    piece = normalizedAnswer(piece);
-                    if (piece.length >= 12 && piece.length <= 420) facts.push({text:piece,index});
-                });
+            const raw=String(text||'').replace(/\r/g,'').replace(/https?:\/\/\S+/gi,'');
+            const lines=raw.split(/\n+/).map(x=>x.replace(/^\s*[•·▪◦\-*–—]+\s*/,'').trim()).filter(Boolean);
+            const facts=[];
+            const add=(value,index)=>{
+                let v=normalizedAnswer(value); if(!v||v.length<12)return;
+                if(/^(\[)?(slide|page|box|question)\s*\d+|click card to flip|^[\d\s]+$/i.test(v))return;
+                const pieces=v.length>420?v.split(/(?<=[.!?;])\s+/):[v];
+                pieces.forEach(piece=>{piece=normalizedAnswer(piece);if(piece.length>=12&&piece.length<=420)facts.push({text:piece,index});});
             };
-            lines.forEach((line,i) => add(line,i));
-            if (facts.length < 3) {
-                raw.split(/(?<=[.!?])\s+/).forEach((x,i)=>add(x,i));
-            }
-            const seen = new Set();
-            return facts.filter(f => {
-                const key=f.text.toLowerCase();
-                if(seen.has(key)) return false;
-                seen.add(key); return true;
-            }).slice(0,200);
+            lines.forEach((line,i)=>add(line,i));
+            if(facts.length<3)raw.split(/(?<=[.!?])\s+/).forEach((x,i)=>add(x,i));
+            const seen=new Set();
+            return facts.filter(f=>{const k=f.text.toLowerCase();if(seen.has(k))return false;seen.add(k);return true;}).slice(0,250);
         }
 
-        function makeMaterialQuestion(fact) {
-            const text = fact.text;
-            // X: definition / X - definition
-            let m = text.match(/^(.{2,90}?)\s*[:\-–—]\s*(.{12,})$/);
-            if (m && !/[.!?]$/.test(m[1]) && !/^general information/i.test(m[1])) {
-                return { question:`What is ${m[1].trim()}?`, answer:normalizedAnswer(m[2]), mode:'definition' };
+        function makeMaterialQuestion(fact){
+            const text=normalizedAnswer(fact.text);
+            let m=text.match(/^([^:–—-]{2,90})\s*[:–—-]\s*(.{12,})$/);
+            if(m&&m[1].split(/\s+/).length<=12)return {question:`What is ${m[1].trim()}?`,answer:normalizedAnswer(m[2]),mode:'definition'};
+            m=text.match(/^(.{2,90}?)\s+(?:is|are|was|were)\s+(.{12,})$/i);
+            if(m&&!/^(everything|there|this|it|they)\b/i.test(m[1]))return {question:`What is ${m[1].trim()}?`,answer:normalizedAnswer(m[2].replace(/[.]$/,'')),mode:'definition'};
+            const date=text.match(/\b\d{1,2}(?:st|nd|rd|th)?\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{3,4}\b|\b(?:19|20)\d{2}\b/i);
+            if(date&&/\b(started|began|ended|signed|declared|assassinated|invaded|occurred|founded|launched)\b/i.test(text)){
+                const answer=date[0];
+                const lead=text.slice(0,date.index||0).trim();
+                const event=lead.match(/^(.+?)\s+(started|began|ended)\s*$/i);
+                if(event){
+                    const subject=event[1].trim();
+                    return {question:/ended/i.test(event[2])?`When did ${subject} end?`:`When did ${subject} begin?`,answer,mode:'date'};
+                }
+                if(/^started|^began|^ended/i.test(lead)) return {question:`What date is given for this event?`,answer,mode:'date'};
+                return {question:`What happened on ${date[0]}?`,answer:text,mode:'date'};
             }
-            // X is/was Y.
-            m = text.match(/^(.{2,90}?)\s+(?:is|was|are|were)\s+(.{12,})$/i);
-            if (m && !/^everything|everything we|there|this|it\b/i.test(m[1])) {
-                return { question:`What is ${m[1].trim()}?`, answer:normalizedAnswer(m[2].replace(/[.]$/,'')), mode:'definition' };
-            }
-            // Dates: ask what the source says happened at the date.
-            const date = text.match(/\b\d{1,2}(?:st|nd|rd|th)?\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{3,4}\b|\b(?:19|20)\d{2}\b/i);
-            if (date) return { question:`According to the material, what happened on ${date[0]}?`, answer:text, mode:'fact' };
-
-            // Cause/effect statements become focused recall questions when recognizable.
-            m = text.match(/^(.{2,100}?)\s+(because|due to|as a result of|caused|led to)\s+(.{12,})$/i);
-            if (m) return { question:`According to the material, what caused ${m[1].trim()}?`, answer:m[3].trim().replace(/[.]$/,''), mode:'cause' };
-
-            // Otherwise use a source-grounded statement question. The options are all
-            // drawn from the same material, so no unrelated card answer can leak in.
-            return { question:'Which statement is supported by the study material?', answer:text, mode:'statement' };
+            m=text.match(/^(.{2,110}?)\s+(because|due to|as a result of)\s+(.{12,})$/i);
+            if(m)return {question:`What caused ${m[1].trim()}?`,answer:m[3].replace(/[.]$/,'').trim(),mode:'cause'};
+            m=text.match(/^(.{2,110}?)\s+(caused|led to)\s+(.{12,})$/i);
+            if(m){ const verb=/led to/i.test(m[2])?'lead to':'cause'; return {question:`What did ${m[1].trim()} ${verb}?`,answer:m[3].replace(/[.]$/,'').trim(),mode:'cause'}; }
+            return {question:'Which statement is directly supported by the material?',answer:text,mode:'statement'};
         }
 
-        function relevantMaterialDistractors(targetFact, facts, wanted=3) {
-            const ranked=facts
-                .filter(f=>f!==targetFact && normalizedAnswer(f.text)!==normalizedAnswer(targetFact.text))
-                .map(f=>({fact:f, score:tokenSimilarity(targetFact.text,f.text)}))
-                .filter(x=>x.score>=0.12)
-                .sort((a,b)=>b.score-a.score);
+        function relatedQuizFacts(target,facts,wanted=3){
+            const ranked=facts.filter(f=>f!==target).map(f=>({fact:f,score:tokenSimilarity(target.text,f.text),distance:Math.abs((target.index??0)-(f.index??0))}))
+                .filter(x=>x.score>=0.18 || x.distance<=2)
+                .sort((a,b)=>(b.score-a.score)||(a.distance-b.distance));
             const out=[];
             for(const x of ranked){
-                if(out.some(y=>tokenSimilarity(y.text,x.fact.text)>0.82)) continue;
-                out.push(x.fact);
-                if(out.length>=wanted) break;
+                if(normalizedAnswer(x.fact.text)===normalizedAnswer(target.text))continue;
+                if(out.some(y=>tokenSimilarity(y.text,x.fact.text)>0.82))continue;
+                out.push(x.fact); if(out.length>=wanted)break;
             }
             return out;
         }
 
-        function generateQuizFromMaterial() {
-            ensureProState();
-            const text = document.getElementById('rawNotesInput')?.value?.trim() ||
-                (userState.materialLibrary?.length ? userState.materialLibrary[userState.materialLibrary.length-1].text : '');
-            if(!text){ toast('Upload or paste study material first.', 'error'); return; }
-
-            const facts=materialFacts(text);
-            if(facts.length<3){ toast('I need at least 3 separate facts in the material to make a reliable quiz.', 'error'); return; }
-
-            const questions=[];
-            const shuffled=[...facts].sort(()=>Math.random()-0.5);
-            for(const fact of shuffled){
-                const built=makeMaterialQuestion(fact);
-                const distractors=relevantMaterialDistractors(fact,facts,3);
-                if(distractors.length<2) continue;
-                const options=[built.answer,...distractors.map(x=>normalizedAnswer(x.text))]
-                    .filter((v,i,a)=>v && a.indexOf(v)===i)
-                    .sort(()=>Math.random()-0.5);
-                if(options.length<3) continue;
-                questions.push({
-                    question:built.question,
-                    correctAnswer:built.answer,
-                    options:options.slice(0,4),
-                    source:'material',
-                    sourceName:currentImportSourceName || userState.materialLibrary?.at(-1)?.title || 'Study material',
-                    sourceFact:fact.text,
-                    difficulty: built.mode==='statement' ? 'medium' : 'mixed'
-                });
-                if(questions.length>=10) break;
-            }
-
-            if(!questions.length){
-                toast('The material does not contain enough related facts to make reliable MCQs. I will not use unrelated information just to fill the quiz.', 'error');
-                return;
-            }
-            activeQuizQuestions=questions;
-            currentQuizIndex=0;
-            quizScore=0;
-            renderQuizQuestion();
-            toast(`Generated ${questions.length} questions directly from the source material.`, 'success');
+        function buildTrueFalseQuestion(fact){
+            const statement=normalizedAnswer(fact.text).replace(/[.]$/,'');
+            return {question:`True or False: ${statement}.`,correctAnswer:'True',options:['True','False'],sourceFact:fact.text,mode:'true-false'};
         }
 
-        function renderQuizQuestion() {
-            if(!activeQuizQuestions.length) return;
+        function generateQuizFromMaterial(){
+            ensureProState();
+            const allMaterials=userState.materialLibrary||[];
+            const scopedMaterials=getStudyMaterials();
+            const material=scopedMaterials.at(-1)||allMaterials.at(-1);
+            const rawText=document.getElementById('rawNotesInput')?.value?.trim() || '';
+            const rawSubject=inferSubjectAndTopic(currentImportSourceName).subject;
+            const useRaw=!rawText ? false : (getActiveSubject()==='All Subjects' || rawSubject===getActiveSubject());
+            const text=useRaw?rawText:(material?.text||'');
+            if(!text){toast(`No material available for ${getActiveSubject()}. Upload or select another subject.`,'error');return;}
+            const facts=materialFacts(text); if(facts.length<2){toast('I need at least 2 separate facts to make a quiz.','error');return;}
+            const questions=[]; const shuffled=[...facts].sort(()=>Math.random()-.5); const used=new Set();
+            for(const fact of shuffled){
+                if(questions.length>=10)break;
+                const built=makeMaterialQuestion(fact); const related=relatedQuizFacts(fact,facts,3);
+                let q;
+                if(built.mode==='date' && related.length>=2){
+                    const dateCandidates=facts.filter(f=>f!==fact&&/\b(?:19|20)\d{2}\b|\b\d{1,2}(?:st|nd|rd|th)?\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{3,4}\b/i.test(f.text)).slice(0,5);
+                    const opts=[built.answer,...dateCandidates.map(f=>f.text.match(/\b(?:19|20)\d{2}\b|\b\d{1,2}(?:st|nd|rd|th)?\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{3,4}\b/i)?.[0]).filter(Boolean)];
+                    const unique=[...new Set(opts)];
+                    if(unique.length>=3)q={question:built.question,correctAnswer:built.answer,options:unique.slice(0,4),sourceFact:fact.text};
+                }
+                if(!q&&related.length>=2){
+                    const opts=[built.answer,...related.map(x=>normalizedAnswer(x.text))];
+                    const unique=[...new Set(opts)];
+                    if(unique.length>=3)q={question:built.question,correctAnswer:built.answer,options:unique.slice(0,4),sourceFact:fact.text};
+                }
+                // Never invent unrelated MCQ choices. A true/false item is safer than a bad MCQ.
+                if(!q)q=buildTrueFalseQuestion(fact);
+                const key=q.question.toLowerCase(); if(used.has(key))continue; used.add(key);
+                q.options=[...q.options].sort(()=>Math.random()-.5);
+                q.source='material'; q.sourceName=(material?.title || currentImportSourceName || 'Study material'); q.subject=material?.subject || rawSubject || 'General'; q.topic=material?.chapter || '';
+                q.difficulty=q.mode==='true-false'?'easy':(built.mode==='statement'?'medium':'mixed');
+                questions.push(q);
+            }
+            if(!questions.length){toast('I could not create reliable questions from this material.','error');return;}
+            activeQuizQuestions=questions; currentQuizIndex=0; quizScore=0; renderQuizQuestion();
+            toast(`Generated ${questions.length} source-based questions.`, 'success');
+        }
+
+        function renderQuizQuestion(){
+            if(!activeQuizQuestions.length)return;
             const q=activeQuizQuestions[currentQuizIndex];
             document.getElementById('quizProgress').innerText=`Question ${currentQuizIndex+1} of ${activeQuizQuestions.length}`;
             document.getElementById('quizScore').innerText=`Score: ${quizScore} XP`;
             document.getElementById('quizQuestionText').innerText=q.question;
             const grid=document.getElementById('quizOptionsGrid');
-            grid.innerHTML=q.options.map((opt,idx)=>{
-                const safe=escapeHtml(opt);
-                return `<button data-option-index="${idx}" class="quiz-option p-3 text-left glass-card hover:bg-slate-800 rounded-xl border border-slate-700 text-xs text-slate-200 font-medium transition">${safe}</button>`;
-            }).join('');
+            grid.innerHTML=q.options.map((opt,idx)=>`<button data-option-index="${idx}" class="quiz-option p-3 text-left glass-card hover:bg-slate-800 rounded-xl border border-slate-700 text-xs text-slate-200 font-medium transition">${escapeHtml(opt)}</button>`).join('');
             grid.querySelectorAll('.quiz-option').forEach(btn=>btn.addEventListener('click',()=>checkQuizOption(q.options[Number(btn.dataset.optionIndex)],btn)));
-            document.getElementById('quizExplanation').classList.add('hidden');
-            document.getElementById('nextQuizBtn').classList.add('hidden');
+            document.getElementById('quizExplanation').classList.add('hidden'); document.getElementById('nextQuizBtn').classList.add('hidden');
         }
 
-        function checkQuizOption(selected,btn) {
-            const q=activeQuizQuestions[currentQuizIndex];
-            const isCorrect=selected===q.correctAnswer;
+        function checkQuizOption(selected,btn){
+            const q=activeQuizQuestions[currentQuizIndex], correct=selected===q.correctAnswer;
             document.querySelectorAll('.quiz-option').forEach(b=>b.disabled=true);
-            if(isCorrect){
-                btn.classList.add('bg-emerald-500/20','border-emerald-500','text-emerald-300');
-                quizScore+=20; recordActivity(20);
-            }else{
+            if(correct){btn.classList.add('bg-emerald-500/20','border-emerald-500','text-emerald-300');quizScore+=20;recordActivity(20);}
+            else {
                 btn.classList.add('bg-rose-500/20','border-rose-500','text-rose-300');
                 document.querySelectorAll('.quiz-option').forEach(b=>{if(b.textContent.trim()===q.correctAnswer)b.classList.add('bg-emerald-500/20','border-emerald-500','text-emerald-300');});
+                userState.quizMistakes.push({date:new Date().toISOString(),question:q.question,selected,correctAnswer:q.correctAnswer,sourceName:q.sourceName||'Study material'});
+                userState.quizMistakes=userState.quizMistakes.slice(-100);
             }
-            const exp=document.getElementById('quizExplanation');
-            exp.innerText=`Correct answer: ${q.correctAnswer}`;
-            exp.classList.remove('hidden');
-            document.getElementById('quizScore').innerText=`Score: ${quizScore} XP`;
-            document.getElementById('nextQuizBtn').classList.remove('hidden');
+            document.getElementById('quizExplanation').innerText=`Correct answer: ${q.correctAnswer}`;
+            document.getElementById('quizExplanation').classList.remove('hidden'); document.getElementById('quizScore').innerText=`Score: ${quizScore} XP`; document.getElementById('nextQuizBtn').classList.remove('hidden');
         }
 
         document.getElementById('nextQuizBtn').addEventListener('click',()=>{
             currentQuizIndex++;
             if(currentQuizIndex<activeQuizQuestions.length){renderQuizQuestion();return;}
-            const total=activeQuizQuestions.length;
-            const correct=Math.round(quizScore/20);
-            userState.quizHistory=userState.quizHistory||[];
-            userState.quizHistory.push({date:new Date().toISOString(),score:Math.round(correct/total*100),correct,total,source:'material',sourceName:activeQuizQuestions[0]?.sourceName||'Study material'});
-            userState.quizHistory=userState.quizHistory.slice(-50);
-            saveActiveUserData();
-            renderAdvancedDashboard();
+            const total=activeQuizQuestions.length, correct=Math.round(quizScore/20);
+            userState.quizHistory.push({date:new Date().toISOString(),score:Math.round(correct/total*100),correct,total,source:'material',sourceName:activeQuizQuestions[0]?.sourceName||'Study material',subject:activeQuizQuestions[0]?.subject||getActiveSubject(),topic:activeQuizQuestions[0]?.topic||''});
+            userState.quizHistory=userState.quizHistory.slice(-100); savePro();
             toast(`Quiz complete: ${correct}/${total} correct (${Math.round(correct/total*100)}%).`,'success');
         });
 
@@ -1491,13 +1589,13 @@
         window.importPresetDeck = function(type) {
             if (type === 'bio') {
                 userState.cards.push(
-                    { id: 'bio_1', question: 'What is the role of Ribosomes?', answer: 'Protein synthesis in cells.', box: 1 },
-                    { id: 'bio_2', question: 'Define Osmosis.', answer: 'Diffusion of water across a semi-permeable membrane.', box: 1 }
+                    { id: 'bio_1', question: 'What is the role of Ribosomes?', answer: 'Protein synthesis in cells.', box: 1, subject:'Biology', topic:'Cell Biology' },
+                    { id: 'bio_2', question: 'Define Osmosis.', answer: 'Diffusion of water across a semi-permeable membrane.', box: 1, subject:'Biology', topic:'Cell Biology' }
                 );
             } else if (type === 'cs') {
                 userState.cards.push(
-                    { id: 'cs_1', question: 'Time complexity of Binary Search?', answer: 'O(log n)', box: 1 },
-                    { id: 'cs_2', question: 'What is a Hash Table?', answer: 'Data structure that maps keys to values for O(1) lookup.', box: 1 }
+                    { id: 'cs_1', question: 'Time complexity of Binary Search?', answer: 'O(log n)', box: 1, subject:'Computer Science', topic:'Algorithms' },
+                    { id: 'cs_2', question: 'What is a Hash Table?', answer: 'Data structure that maps keys to values for O(1) lookup.', box: 1, subject:'Computer Science', topic:'Data Structures' }
                 );
             }
             saveActiveUserData();
@@ -1541,11 +1639,20 @@
             userState.cards = Array.isArray(userState.cards) ? userState.cards : [];
             userState.goals = Array.isArray(userState.goals) ? userState.goals : [];
             userState.quizHistory = Array.isArray(userState.quizHistory) ? userState.quizHistory : [];
+            userState.quizMistakes = Array.isArray(userState.quizMistakes) ? userState.quizMistakes : [];
             userState.searchHistory = Array.isArray(userState.searchHistory) ? userState.searchHistory : [];
+            userState.materialLibrary = Array.isArray(userState.materialLibrary) ? userState.materialLibrary : [];
+            userState.notes = Array.isArray(userState.notes) ? userState.notes : [];
+            userState.subjects = Array.isArray(userState.subjects) ? userState.subjects : [];
+            userState.planner = Array.isArray(userState.planner) ? userState.planner : [];
+            userState.studySettings ||= {subject:'',chapter:'',dailyMinutes:30,activeSubject:'All Subjects'};
+            userState.studySettings.activeSubject ||= 'All Subjects';
+            userState.aiSettings ||= {endpoint:'',apiKey:'',model:'gpt-4o-mini'};
+            userState.dailyChallenge ||= {date:new Date().toISOString().slice(0,10),done:0};
             userState.activityHeatmap = Array.isArray(userState.activityHeatmap) ? userState.activityHeatmap : Array(28).fill(0);
             userState.activityHeatmap = userState.activityHeatmap.slice(-28);
             while (userState.activityHeatmap.length < 28) userState.activityHeatmap.unshift(0);
-            userState.cards.forEach(c => { c.box = Math.min(5, Math.max(1, Number(c.box) || 1)); c.reviewCount = Number(c.reviewCount) || 0; c.ratingHistory = Array.isArray(c.ratingHistory) ? c.ratingHistory : []; if (!c.intervalDays) c.intervalDays = [0,1,3,7,14,30][c.box] || 1; if (!('dueAt' in c)) c.dueAt = c.lastReviewed ? new Date(new Date(c.lastReviewed).getTime() + c.intervalDays*86400000).toISOString() : null; });
+            userState.cards.forEach(c => { c.subject=c.subject||'General'; c.topic=c.topic||''; c.sourceName=c.sourceName||''; c.box = Math.min(5, Math.max(1, Number(c.box) || 1)); c.reviewCount = Number(c.reviewCount) || 0; c.ratingHistory = Array.isArray(c.ratingHistory) ? c.ratingHistory : []; if (!c.intervalDays) c.intervalDays = [0,1,3,7,14,30][c.box] || 1; if (!('dueAt' in c)) c.dueAt = c.lastReviewed ? new Date(new Date(c.lastReviewed).getTime() + c.intervalDays*86400000).toISOString() : null; });
         }
 
         function addCustomCard(question, answer) {
@@ -1644,8 +1751,11 @@
         }
         function inferSubjectAndTopic(sourceName){
             const n=String(sourceName||'').replace(/\.[^.]+$/,'').replace(/[_-]+/g,' ').trim();
-            const subject=(document.getElementById('materialSubject')?.value||document.getElementById('centerSubject')?.value||userState?.studySettings?.subject||'').trim() || (n.split(/\s+/)[0]||'General');
-            const topic=(document.getElementById('materialChapter')?.value||document.getElementById('centerChapter')?.value||userState?.studySettings?.chapter||'').trim() || n || 'General';
+            const explicit=(document.getElementById('materialSubject')?.value||document.getElementById('centerSubject')?.value||'').trim();
+            const saved=(userState?.studySettings?.subject||'').trim();
+            const known=subjectNames().filter(x=>x!=='General').sort((a,b)=>b.length-a.length).find(x=>n.toLowerCase().includes(x.toLowerCase()));
+            const subject=explicit || (activeSubjectFilter!=='All Subjects'?activeSubjectFilter:'') || saved || known || 'General';
+            const topic=(document.getElementById('materialChapter')?.value||document.getElementById('centerChapter')?.value||'').trim() || n || 'General';
             return {subject,topic};
         }
 
@@ -1663,26 +1773,21 @@
                 if (file.type === 'application/pdf' || lowerName.endsWith('.pdf')) {
                     if (!window.pdfjsLib) throw new Error('PDF engine failed to load.');
                     const pdf = await pdfjsLib.getDocument({data: await file.arrayBuffer()}).promise;
-                    let text = '';
-                    let pagesWithText = 0;
+                    const pageTexts=[];
                     for (let pageNo=1; pageNo<=pdf.numPages; pageNo++) {
                         const page = await pdf.getPage(pageNo);
-                        const content = await page.getTextContent();
                         const pageText = await extractPdfPageTextStructured(page);
-                        if (pageText) { pagesWithText++; text += pageText + '\n'; }
+                        pageTexts.push({pageNo,text:pageText});
                     }
-                    // If the PDF is scanned/image-only, render and OCR each page.
-                    if (pagesWithText < pdf.numPages || !text.trim()) {
-                        toast(`OCR: scanning ${pdf.numPages} PDF page(s)…`);
-                        let ocrText = '';
-                        for (let pageNo=1; pageNo<=pdf.numPages; pageNo++) {
-                            toast(`OCR: reading PDF page ${pageNo}/${pdf.numPages}…`);
-                            const page = await pdf.getPage(pageNo);
-                            const pageText = await ocrPdfPage(page);
-                            if (pageText) ocrText += pageText + '\n';
+                    let text=pageTexts.map(p=>p.text?`[Page ${p.pageNo}]\n${p.text}`:'').filter(Boolean).join('\n\n');
+                    const missingPages=pageTexts.filter(p=>!p.text.trim());
+                    if (missingPages.length) {
+                        for (const item of missingPages) {
+                            toast(`OCR: reading PDF page ${item.pageNo}/${pdf.numPages}…`);
+                            const page=await pdf.getPage(item.pageNo);
+                            const ocr=await ocrPdfPage(page);
+                            if(ocr) text += `\n\n[Page ${item.pageNo} OCR]\n${ocr}`;
                         }
-                        // Keep normal PDF text and add OCR output, avoiding an empty result.
-                        text = [text.trim(), ocrText.trim()].filter(Boolean).join('\n\n');
                     }
                     if (!text.trim()) throw new Error('No readable text could be extracted or OCRed from this PDF.');
                     document.getElementById('rawNotesInput').value = text.trim();
@@ -1728,7 +1833,7 @@
                 if (/^image\//i.test(file.type) || /\.(png|jpe?g|webp)$/i.test(lowerName)) {
                     if (!window.Tesseract) throw new Error('OCR engine failed to load.');
                     toast(`OCR: reading ${file.name}…`);
-                    const result = await Tesseract.recognize(file, 'eng', { logger: m => { if (m.status === 'recognizing text' && m.progress) toast(`OCR: ${Math.round(m.progress*100)}%`); } });
+                    const result = await Tesseract.recognize(file, localStorage.getItem('studycraft_ocr_lang') || 'eng', { logger: m => { if (m.status === 'recognizing text' && m.progress) toast(`OCR: ${Math.round(m.progress*100)}%`); } });
                     const text = result.data.text || '';
                     if (!text.trim()) throw new Error('OCR could not find readable text in this image.');
                     document.getElementById('rawNotesInput').value = text.trim();
@@ -1816,7 +1921,7 @@
         function buildMindMap() {
             const svg = document.getElementById('mindmapSVG'), group = document.getElementById('mindmapGroup');
             if (!svg || !group) return;
-            const cards = (userState?.cards || []).slice(0,12);
+            const cards = getStudyCards().slice(0,12);
             const box = svg.getBoundingClientRect(), w=box.width||700, h=box.height||450;
             group.innerHTML='';
             const cx=w/2, cy=h/2;
@@ -1831,7 +1936,7 @@
         function renderAdvancedDashboard() {
             if (!userState) return;
             ensureUserStateShape();
-            const cards=userState.cards;
+            const cards=getStudyCards();
             const due=cards.filter(isCardDue).length;
             const reviews=cards.reduce((n,c)=>n+(Number(c.reviewCount)||0),0);
             const allRatings=cards.flatMap(c=>Array.isArray(c.ratingHistory)?c.ratingHistory.map(r=>Number(r.rating)||0):[]);
@@ -1842,9 +1947,16 @@
             document.getElementById('statDueCards')?.replaceChildren(document.createTextNode(due));
             document.getElementById('statRetention')?.replaceChildren(document.createTextNode(`${retention}%`));
             document.getElementById('statReviews')?.replaceChildren(document.createTextNode(reviews));
-            const quizScores=(userState.quizHistory||[]).map(h=>Number(h.score)||0);
+            const quizScores=(userState.quizHistory||[]).filter(h=>getActiveSubject()==='All Subjects'||(h.subject||'General')===getActiveSubject()).map(h=>Number(h.score)||0);
             const quizAvg=quizScores.length?Math.round(quizScores.reduce((a,b)=>a+b,0)/quizScores.length):0;
             document.getElementById('statQuizAvg')?.replaceChildren(document.createTextNode(`${quizAvg}%`));
+            const weakTopics={};
+            cards.forEach(c=>{const bad=(c.ratingHistory||[]).filter(r=>Number(r.rating)<3).length;if(bad) weakTopics[c.topic||c.subject||'General']=(weakTopics[c.topic||c.subject||'General']||0)+bad;});
+            const weakTopicEntries=Object.entries(weakTopics).sort((a,b)=>b[1]-a[1]).slice(0,5);
+            const weakSpot=document.getElementById('weakSpotCount');
+            if(weakSpot) weakSpot.textContent=weakTopicEntries.length?`${weakTopicEntries[0][0]}`:'None';
+            const materialStat=document.getElementById('statMaterials');
+            if(materialStat) materialStat.textContent=String(getStudyMaterials().length);
             const status=document.getElementById('dashboardReviewStatus');
             if(status) status.innerText=due ? `${due} cards need review today` : 'All caught up 🎉';
             const dist=document.getElementById('boxDistribution');
@@ -1879,9 +1991,12 @@
             ensureUserStateShape();
             const q=query.trim().toLowerCase();
             const results=[];
-            userState.cards.forEach(c=>{ if(!q || `${c.question} ${c.answer}`.toLowerCase().includes(q)) results.push({type:'Flashcard',title:c.question,detail:c.answer,id:c.id,icon:'fa-layer-group'}); });
+            getStudyCards().forEach(c=>{ if(!q || `${c.question} ${c.answer}`.toLowerCase().includes(q)) results.push({type:'Flashcard',title:c.question,detail:c.answer,id:c.id,icon:'fa-layer-group'}); });
             userState.goals.forEach(g=>{ if(!q || `${g.subject}`.toLowerCase().includes(q)) results.push({type:'Goal',title:g.subject,detail:`${g.progress}% / ${g.target}%`,icon:'fa-bullseye'}); });
-            (userState.quizHistory||[]).forEach((h,i)=>{ if(!q || JSON.stringify(h).toLowerCase().includes(q)) results.push({type:'Quiz',title:`Quiz — ${h.score ?? 0}%`,detail:`${h.correct ?? 0}/${h.total ?? 0} correct`,icon:'fa-circle-question'}); });
+            (userState.quizHistory||[]).filter(h=>getActiveSubject()==='All Subjects'||(h.subject||'General')===getActiveSubject()).forEach((h,i)=>{ if(!q || JSON.stringify(h).toLowerCase().includes(q)) results.push({type:'Quiz',title:`Quiz — ${h.score ?? 0}%`,detail:`${h.correct ?? 0}/${h.total ?? 0} correct`,icon:'fa-circle-question'}); });
+            getStudyMaterials().forEach(m=>{ if(!q || `${m.title} ${m.text} ${m.subject} ${m.chapter}`.toLowerCase().includes(q)) results.push({type:'Material',title:m.title,detail:`${m.subject||'General'} • ${m.chapter||'General'}`,icon:'fa-file-lines'}); });
+            (userState.notes||[]).forEach(n=>{ if(!q || `${n.title} ${n.text}`.toLowerCase().includes(q)) results.push({type:'Note',title:n.title,detail:n.text.slice(0,100),icon:'fa-note-sticky'}); });
+            (userState.subjects||[]).forEach(s=>{ if(!q || s.name.toLowerCase().includes(q)) results.push({type:'Subject',title:s.name,detail:'Subject',icon:'fa-folder'}); });
             const out=document.getElementById('globalSearchResults');
             if(!results.length){ out.innerHTML='<div class="p-8 text-center text-xs text-slate-500">No results found.</div>'; return; }
             out.innerHTML=results.slice(0,40).map(r=>`<button class="w-full text-left p-3 rounded-xl glass-card hover:bg-slate-800 transition flex gap-3" ${r.id?`onclick="jumpToCard('${String(r.id).replace(/'/g,"\\'")}');closeGlobalSearch()"`:''}><i class="fa-solid ${r.icon} text-brand-500 mt-0.5"></i><span class="min-w-0"><span class="block text-[10px] uppercase tracking-wide text-slate-500">${r.type}</span><span class="block text-xs font-semibold text-white truncate">${escapeHtml(r.title)}</span><span class="block text-[11px] text-slate-400 truncate">${escapeHtml(r.detail)}</span></span></button>`).join('');
@@ -1912,7 +2027,8 @@
             userState.subjects ||= [];
             userState.notes = Array.isArray(userState.notes) ? userState.notes : [];
             userState.materialLibrary = Array.isArray(userState.materialLibrary) ? userState.materialLibrary : [];
-            userState.studySettings ||= {subject:'',chapter:'',dailyMinutes:30};
+            userState.studySettings ||= {subject:'',chapter:'',dailyMinutes:30,activeSubject:'All Subjects'};
+            userState.studySettings.activeSubject ||= 'All Subjects';
             userState.aiSettings ||= {endpoint:'',apiKey:'',model:'gpt-4o-mini'};
             userState.cards.forEach(c=>{
                 c.tags=Array.isArray(c.tags)?c.tags:[];
@@ -1991,7 +2107,9 @@
         function renderProSuite(){
             ensureProState(); makeProPanel(); updateAchievements();
             const subjects=document.getElementById('proSubjects');
-            if(subjects) subjects.innerHTML=deriveSubjects().map(([s,n])=>`<div class="flex justify-between items-center p-2 rounded-lg bg-slate-900/50"><span class="text-[11px] text-slate-200">${escapeHtml(s)}</span><span class="text-[10px] text-slate-500">${n} cards</span></div>`).join('') || '<p class="text-xs text-slate-500">No subjects yet. Add one or upload material.</p>';
+            if(subjects) subjects.innerHTML=subjectNames().map(s=>{const n=(userState.cards||[]).filter(c=>(c.subject||'General')===s).length; const active=getActiveSubject()===s; return `<button class="w-full flex justify-between items-center p-2 rounded-lg ${active?'bg-brand-500/10 border border-brand-500/20':'bg-slate-900/50'}" data-workspace-subject="${escapeAttr(s)}"><span class="text-[11px] ${active?'text-brand-300':'text-slate-200'}">${escapeHtml(s)}</span><span class="text-[10px] text-slate-500">${n} cards</span></button>`;}).join('') || '<p class="text-xs text-slate-500">No subjects yet. Add one or upload material.</p>';
+            document.querySelectorAll('[data-workspace-subject]').forEach(b=>b.onclick=()=>setActiveSubject(b.dataset.workspaceSubject));
+            renderSubjectWorkspace();
             const mistakes=getMistakeCards();
             document.getElementById('mistakeCount')?.replaceChildren(document.createTextNode(`${mistakes.length} cards`));
             const ml=document.getElementById('proMistakes');
@@ -2010,10 +2128,12 @@
             userState.subjects.push({id:'sub_'+Date.now(),name:name.trim()}); savePro(); toast('Subject added.','success');
         }
         function showMistakeBank(){
-            const mistakes=getMistakeCards();
-            if(!mistakes.length){toast('Your mistake bank is empty.','success');return;}
-            currentCardIndex=(userState.cards||[]).findIndex(c=>c.id===mistakes[0].id); isFlipped=false;
-            document.querySelector('[data-tab="tab-flashcards"]')?.click(); updateCardDisplay(); toast(`Starting mistake review with ${mistakes.length} cards.`);
+            ensureProState();
+            const mistakes=getMistakeCards(); const quizMistakes=userState.quizMistakes||[];
+            if(!mistakes.length&&!quizMistakes.length){toast('Your mistake bank is empty.','success');return;}
+            const m=document.createElement('div');m.className='study-modal show';
+            m.innerHTML=`<div class="study-modal-card max-w-2xl"><div class="flex justify-between"><div><h3 class="text-lg font-bold text-white">Mistake Bank</h3><p class="text-xs text-slate-400">Flashcards and quiz questions you have missed.</p></div><button class="closeHub text-slate-400">✕</button></div><div class="grid gap-2 mt-4">${mistakes.slice(0,12).map(c=>`<button class="text-left p-3 rounded-xl bg-slate-900 border border-slate-800 hover:border-brand-500" data-card="${escapeAttr(c.id)}"><div class="text-xs font-semibold text-white">${escapeHtml(c.question)}</div><div class="text-[10px] text-rose-400 mt-1">${(c.ratingHistory||[]).filter(x=>Number(x.rating)<3).length} flashcard misses</div></button>`).join('')}${quizMistakes.slice(-12).reverse().map(x=>`<div class="p-3 rounded-xl bg-slate-900 border border-slate-800"><div class="text-[10px] uppercase text-rose-400">Quiz mistake</div><div class="text-xs font-semibold text-white mt-1">${escapeHtml(x.question)}</div><div class="text-[11px] text-slate-400 mt-1">Correct: ${escapeHtml(x.correctAnswer)}</div></div>`).join('')}</div></div>`;
+            document.body.appendChild(m);m.querySelector('.closeHub').onclick=()=>m.remove();m.querySelectorAll('[data-card]').forEach(b=>b.onclick=()=>{const idx=userState.cards.findIndex(c=>c.id===b.dataset.card);if(idx>=0){currentCardIndex=idx;isFlipped=false;m.remove();document.querySelector('[data-tab="tab-flashcards"]')?.click();updateCardDisplay();}});
         }
         function showPlanner(){
             const date=prompt('Exam date (YYYY-MM-DD):'); if(!date) return;
@@ -2024,17 +2144,27 @@
         function startExamMode(){
             if(!activeQuizQuestions.length) generateQuizFromMaterial();
             const qs=(activeQuizQuestions||[]).slice(0,20); if(qs.length<2){toast('Generate a material-based quiz first.','error');return;}
-            const count=Math.min(qs.length,Number(prompt(`How many questions? (2-${qs.length})`))||Math.min(10,qs.length)); const selected=[...qs].sort(()=>Math.random()-.5).slice(0,count);
-            const overlay=document.createElement('div'); overlay.className='fixed inset-0 z-[90] bg-slate-950/95 flex items-center justify-center p-4'; let i=0,score=0;
-            const finish=()=>{const pct=Math.round(score/selected.length*100);userState.quizHistory.push({date:new Date().toISOString(),score:pct,correct:score,total:selected.length,type:'Exam Mode',sourceName:selected[0]?.sourceName||'Material'});savePro();overlay.innerHTML=`<div class="study-modal-card max-w-md text-center"><div class="text-5xl font-black text-brand-400">${pct}%</div><p class="text-sm text-white mt-2">${score}/${selected.length} correct</p><p class="text-xs text-slate-400 mt-2">Result saved to analytics.</p><button id="closeExam" class="mt-6 px-4 py-2 rounded-xl bg-brand-600 text-white text-xs font-bold">Back to StudyCraft</button></div>`;overlay.querySelector('#closeExam').onclick=()=>overlay.remove();renderAdvancedDashboard();};
-            const render=()=>{const q=selected[i];const opts=q.options||[q.correctAnswer];overlay.innerHTML=`<div class="study-modal-card"><div class="flex justify-between text-xs text-slate-400"><span>Exam ${i+1}/${selected.length}</span><span>${escapeHtml(q.sourceName||'Study material')}</span></div><h2 class="text-xl font-bold text-white mt-5">${escapeHtml(q.question)}</h2><div class="grid gap-3 mt-6">${opts.map(o=>`<button class="examOpt text-left p-4 rounded-xl bg-slate-900 border border-slate-700 text-sm text-slate-200 hover:border-brand-500" data-ok="${o===q.correctAnswer}">${escapeHtml(o)}</button>`).join('')}</div><button id="exitExam" class="mt-5 text-xs text-slate-500">Exit exam</button></div>`;overlay.querySelectorAll('.examOpt').forEach(b=>b.onclick=()=>{if(b.dataset.ok==='true')score++;i++;i<selected.length?render():finish();});overlay.querySelector('#exitExam').onclick=()=>overlay.remove();};
+            const requested=Number(prompt(`How many questions? (2-${qs.length})`,String(Math.min(10,qs.length))));
+            const count=Number.isFinite(requested)&&requested>=2?Math.min(qs.length,Math.floor(requested)):Math.min(10,qs.length);
+            const minutes=Number(prompt('Time limit in minutes?',String(Math.max(5,Math.ceil(count*1.5)))));
+            const limitMinutes=Number.isFinite(minutes)&&minutes>0?minutes:Math.max(5,Math.ceil(count*1.5));
+            const selected=[...qs].sort(()=>Math.random()-.5).slice(0,count);
+            const overlay=document.createElement('div'); overlay.className='fixed inset-0 z-[90] bg-slate-950/95 flex items-center justify-center p-4';
+            let i=0,score=0,remaining=Math.round(limitMinutes*60),timer=null,finished=false;
+            const finish=(timedOut=false)=>{if(finished)return;finished=true;clearInterval(timer);const pct=Math.round(score/selected.length*100);userState.quizHistory.push({date:new Date().toISOString(),score:pct,correct:score,total:selected.length,type:'Exam Mode',timedOut,sourceName:selected[0]?.sourceName||'Material'});savePro();overlay.innerHTML=`<div class="study-modal-card max-w-md text-center"><div class="text-5xl font-black text-brand-400">${pct}%</div><p class="text-sm text-white mt-2">${score}/${selected.length} correct</p><p class="text-xs text-slate-400 mt-2">${timedOut?'Time expired. ':''}Result saved to analytics.</p><button id="closeExam" class="mt-6 px-4 py-2 rounded-xl bg-brand-600 text-white text-xs font-bold">Back to StudyCraft</button></div>`;overlay.querySelector('#closeExam').onclick=()=>overlay.remove();renderAdvancedDashboard();};
+            const render=()=>{const q=selected[i];const mm=String(Math.floor(remaining/60)).padStart(2,'0'),ss=String(remaining%60).padStart(2,'0');overlay.innerHTML=`<div class="study-modal-card"><div class="flex justify-between text-xs text-slate-400"><span>Exam ${i+1}/${selected.length}</span><span id="examTimer" class="font-bold text-amber-300">${mm}:${ss}</span></div><span class="text-[10px] text-slate-500">${escapeHtml(q.sourceName||'Study material')}</span><h2 class="text-xl font-bold text-white mt-5">${escapeHtml(q.question)}</h2><div class="grid gap-3 mt-6">${q.options.map(o=>`<button class="examOpt text-left p-4 rounded-xl bg-slate-900 border border-slate-700 text-sm text-slate-200 hover:border-brand-500" data-ok="${o===q.correctAnswer}">${escapeHtml(o)}</button>`).join('')}</div><button id="exitExam" class="mt-5 text-xs text-slate-500">Exit exam</button></div>`;overlay.querySelectorAll('.examOpt').forEach(b=>b.onclick=()=>{if(b.dataset.ok==='true')score++;i++;if(i<selected.length)render();else finish(false);});overlay.querySelector('#exitExam').onclick=()=>{clearInterval(timer);overlay.remove();};};
             document.body.appendChild(overlay);render();
+            timer=setInterval(()=>{remaining--;const el=document.getElementById('examTimer');if(el){el.textContent=`${String(Math.floor(remaining/60)).padStart(2,'0')}:${String(Math.max(0,remaining%60)).padStart(2,'0')}`;}if(remaining<=0)finish(true);},1000);
         }
         function startWrittenPractice(){
-            const source=userState.materialLibrary?.at(-1)?.text||document.getElementById('rawNotesInput')?.value||''; const facts=materialFacts(source); if(!facts.length){toast('Upload study material first.','error');return;}
-            const fact=facts[Math.floor(Math.random()*facts.length)]; const built=makeMaterialQuestion(fact); const answer=prompt(`Written-answer practice\n\n${built.question}\n\nType your answer:`); if(answer===null)return;
-            const expected=normalizedAnswer(built.answer).toLowerCase(), spoken=answer.toLowerCase(); const keywords=[...quizTokens(expected)].filter(w=>w.length>4).slice(0,16); const hits=keywords.filter(k=>spoken.includes(k)).length; const coverage=keywords.length?Math.round(hits/keywords.length*100):0;
-            alert(`Local feedback\n\nKey concept coverage: ${coverage}%\nMatched concepts: ${hits}/${keywords.length}\n\nSource-grounded answer:\n${built.answer}\n\nThis is source-keyword feedback, not AI marking.`);
+            const source=userState.materialLibrary?.at(-1)?.text||document.getElementById('rawNotesInput')?.value||'';
+            const facts=materialFacts(source); if(!facts.length){toast('Upload study material first.','error');return;}
+            const fact=facts[Math.floor(Math.random()*facts.length)]; const built=makeMaterialQuestion(fact);
+            const answer=prompt(`Written-answer practice\n\n${built.question}\n\nType your answer:`); if(answer===null)return;
+            const expected=normalizedAnswer(built.answer).toLowerCase(), spoken=answer.toLowerCase();
+            const keywords=[...quizTokens(expected)].filter(w=>w.length>4).slice(0,16); const hits=keywords.filter(k=>spoken.includes(k)).length; const coverage=keywords.length?Math.round(hits/keywords.length*100):100;
+            const level=coverage>=80?'Strong coverage':coverage>=55?'Partial coverage':'Needs revision';
+            alert(`Written-answer feedback\n\n${level}\nKey concept coverage: ${coverage}%\nMatched concepts: ${hits}/${keywords.length}\n\nSource-grounded answer:\n${built.answer}\n\nNote: this local checker compares key concepts only; it does not judge writing quality or award an official exam mark.`);
         }
         function startMission(){
             const due=getDueCards(); if(due.length){currentCardIndex=(userState.cards||[]).indexOf(due[0]);isFlipped=false;document.querySelector('[data-tab="tab-flashcards"]')?.click();updateCardDisplay();userState.dailyChallenge.done=Math.min(2,(userState.dailyChallenge.done||0)+1);savePro();}
@@ -2053,7 +2183,7 @@ ${c?c.question+'\n'+c.answer:''}`}]})});if(!res.ok)throw new Error(`AI request f
         }
         function editCard(id){
             const c=userState.cards.find(x=>x.id===id); if(!c)return;
-            const q=prompt('Edit question:',c.question); if(q===null)return; const a=prompt('Edit answer:',c.answer); if(a===null)return; c.question=q.trim()||c.question;c.answer=a.trim()||c.answer;savePro();updateCardDisplay();toast('Card updated.','success');
+            const q=prompt('Edit question:',c.question); if(q===null)return; const a=prompt('Edit answer:',c.answer); if(a===null)return; const sub=prompt('Subject:',c.subject||'General'); if(sub===null)return; const topic=prompt('Chapter / topic:',c.topic||''); if(topic===null)return; c.question=q.trim()||c.question;c.answer=a.trim()||c.answer;c.subject=sub.trim()||'General';c.topic=topic.trim();savePro();updateCardDisplay();toast('Card updated.','success');
         }
         function deleteCard(id){
             if(!confirm('Delete this flashcard?'))return; userState.cards=userState.cards.filter(c=>c.id!==id); currentCardIndex=Math.min(currentCardIndex,Math.max(0,userState.cards.length-1));savePro();updateCardDisplay();toast('Card deleted.');
@@ -2066,17 +2196,17 @@ ${c?c.question+'\n'+c.answer:''}`}]})});if(!res.ok)throw new Error(`AI request f
             panel.innerHTML=`<div class="flex flex-wrap items-center justify-between gap-3"><div><h3 class="font-bold text-sm text-white"><i class="fa-solid fa-graduation-cap text-brand-500 mr-2"></i>Study Center</h3><p class="text-xs text-slate-400 mt-1">Organization, planning, card management, AI and offline installation.</p></div><div class="flex flex-wrap gap-2"><button id="openPlannerCenter" class="study-mini-btn">Study Planner</button><button id="openCardManager" class="study-mini-btn">Card Manager</button><button id="openTutorSettings" class="study-mini-btn">AI Tutor</button><button id="installPwaBtn" class="study-mini-btn">Install App</button></div></div><div class="study-hub-grid mt-4"><div class="glass-card p-4 rounded-xl"><h4 class="text-xs font-bold text-white">Subject & Chapter</h4><p class="text-[11px] text-slate-400 mt-1">New imports use this organization.</p><div class="grid grid-cols-2 gap-2 mt-3"><input id="centerSubject" placeholder="Subject" class="rounded-lg bg-slate-900 border border-slate-700 p-2 text-xs text-white"><input id="centerChapter" placeholder="Chapter / topic" class="rounded-lg bg-slate-900 border border-slate-700 p-2 text-xs text-white"></div><button id="saveStudyOrg" class="study-mini-btn mt-2">Save</button></div><div class="glass-card p-4 rounded-xl"><h4 class="text-xs font-bold text-white">Study Planner</h4><div id="plannerSummary" class="text-[11px] text-slate-400 mt-2"></div></div><div class="glass-card p-4 rounded-xl"><h4 class="text-xs font-bold text-white">AI Tutor</h4><p id="aiStatus" class="text-[11px] text-slate-400 mt-2"></p><button id="askTutorBtn" class="study-mini-btn mt-2">Ask Tutor</button></div><div class="glass-card p-4 rounded-xl"><h4 class="text-xs font-bold text-white">Offline / PWA</h4><p id="pwaStatus" class="text-[11px] text-slate-400 mt-2"></p></div></div>`;
             dash.appendChild(panel);document.getElementById('centerSubject').value=userState.studySettings?.subject||'';document.getElementById('centerChapter').value=userState.studySettings?.chapter||'';document.getElementById('saveStudyOrg').onclick=()=>{userState.studySettings.subject=document.getElementById('centerSubject').value.trim();userState.studySettings.chapter=document.getElementById('centerChapter').value.trim();savePro();toast('Study organization saved.','success');};document.getElementById('openPlannerCenter').onclick=showPlannerModal;document.getElementById('openCardManager').onclick=showCardManager;document.getElementById('openTutorSettings').onclick=showTutorSettings;document.getElementById('askTutorBtn').onclick=aiTutorLocal;document.getElementById('installPwaBtn').onclick=installStudyCraft;updatePlannerSummary();updateAIStatus();updatePWAStatus();
         }
-        function updatePlannerSummary(){const el=document.getElementById('plannerSummary');if(!el)return;const p=userState.planner||[];if(!p.length){el.textContent='No plan yet.';return;}const x=p[p.length-1];el.textContent=`${x.examDate} • ${(x.topics||[]).length} topics • ${Math.max(0,Math.ceil((new Date(x.examDate)-new Date())/86400000))} days left`}
-        function showPlannerModal(){ensureProState();const m=document.createElement('div');m.className='study-modal show';m.innerHTML=`<div class="study-modal-card"><div class="flex justify-between"><h3 class="text-lg font-bold text-white">Study Planner</h3><button class="closeHub text-slate-400">✕</button></div><p class="text-xs text-slate-400 mt-1">Plan revision around an exam date.</p><div class="grid md:grid-cols-2 gap-3 mt-4"><input id="planDate" type="date" class="rounded-xl bg-slate-900 border border-slate-700 p-3 text-sm text-white"><input id="planMinutes" type="number" min="10" max="240" value="30" class="rounded-xl bg-slate-900 border border-slate-700 p-3 text-sm text-white"></div><textarea id="planTopics" rows="5" class="w-full mt-3 rounded-xl bg-slate-900 border border-slate-700 p-3 text-sm text-white" placeholder="One topic per line or comma separated"></textarea><button id="savePlanModal" class="mt-3 px-4 py-2 rounded-xl bg-brand-600 text-white text-xs font-bold">Create Plan</button><div id="existingPlans" class="mt-5 space-y-2"></div></div>`;document.body.appendChild(m);m.querySelector('.closeHub').onclick=()=>m.remove();m.querySelector('#existingPlans').innerHTML=(userState.planner||[]).slice(-5).reverse().map(x=>`<div class="p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300"><b>${escapeHtml(x.examDate)}</b> • ${(x.topics||[]).map(escapeHtml).join(', ')}</div>`).join('');m.querySelector('#savePlanModal').onclick=()=>{const d=m.querySelector('#planDate').value,t=m.querySelector('#planTopics').value.split(/[,\n]/).map(x=>x.trim()).filter(Boolean),mins=Number(m.querySelector('#planMinutes').value)||30;if(!d||!t.length){toast('Add an exam date and topics.','error');return;}userState.planner.push({id:'plan_'+Date.now(),examDate:d,topics:t,dailyMinutes:mins,createdAt:new Date().toISOString()});savePro();m.remove();updatePlannerSummary();toast('Study plan created.','success');};}
+        function updatePlannerSummary(){const el=document.getElementById('plannerSummary');if(!el)return;const p=userState.planner||[];if(!p.length){el.textContent='No plan yet.';return;}const x=p[p.length-1],today=new Date().toISOString().slice(0,10),todayPlan=(x.schedule||[]).find(d=>d.date===today);el.innerHTML=`<b>${escapeHtml(x.examDate)}</b> • ${(x.topics||[]).length} topics • ${Math.max(0,Math.ceil((new Date(x.examDate+'T00:00:00')-new Date())/86400000))} days left${todayPlan?`<br>Today: ${escapeHtml(todayPlan.topics.join(', '))} • ${todayPlan.minutes} min`:''}`}
+        function showPlannerModal(){ensureProState();const m=document.createElement('div');m.className='study-modal show';m.innerHTML=`<div class="study-modal-card"><div class="flex justify-between"><h3 class="text-lg font-bold text-white">Study Planner</h3><button class="closeHub text-slate-400">✕</button></div><p class="text-xs text-slate-400 mt-1">Plan revision around an exam date.</p><div class="grid md:grid-cols-2 gap-3 mt-4"><input id="planDate" type="date" class="rounded-xl bg-slate-900 border border-slate-700 p-3 text-sm text-white"><input id="planMinutes" type="number" min="10" max="240" value="30" class="rounded-xl bg-slate-900 border border-slate-700 p-3 text-sm text-white"></div><textarea id="planTopics" rows="5" class="w-full mt-3 rounded-xl bg-slate-900 border border-slate-700 p-3 text-sm text-white" placeholder="One topic per line or comma separated"></textarea><button id="savePlanModal" class="mt-3 px-4 py-2 rounded-xl bg-brand-600 text-white text-xs font-bold">Create Plan</button><div id="existingPlans" class="mt-5 space-y-2"></div></div>`;document.body.appendChild(m);m.querySelector('.closeHub').onclick=()=>m.remove();m.querySelector('#existingPlans').innerHTML=(userState.planner||[]).slice(-5).reverse().map(x=>`<div class="p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300"><b>${escapeHtml(x.examDate)}</b> • ${(x.topics||[]).map(escapeHtml).join(', ')}</div>`).join('');m.querySelector('#savePlanModal').onclick=()=>{const d=m.querySelector('#planDate').value,t=m.querySelector('#planTopics').value.split(/[,\n]/).map(x=>x.trim()).filter(Boolean),mins=Number(m.querySelector('#planMinutes').value)||30;if(!d||!t.length){toast('Add an exam date and topics.','error');return;}const today=new Date();today.setHours(0,0,0,0);const exam=new Date(d+'T00:00:00');const days=Math.max(1,Math.ceil((exam-today)/86400000));const schedule=Array.from({length:days},(_,i)=>({date:new Date(today.getTime()+i*86400000).toISOString().slice(0,10),topics:[t[i%t.length]],minutes:mins}));userState.planner.push({id:'plan_'+Date.now(),examDate:d,topics:t,dailyMinutes:mins,schedule,createdAt:new Date().toISOString()});savePro();m.remove();updatePlannerSummary();toast(`Study plan created for ${days} days.`,'success');};}
         function showCardManager(){ensureProState();const m=document.createElement('div');m.className='study-modal show';m.innerHTML=`<div class="study-modal-card"><div class="flex justify-between"><div><h3 class="text-lg font-bold text-white">Card Preview & Manager</h3><p class="text-xs text-slate-400">Search, preview, edit and delete cards.</p></div><button class="closeHub text-slate-400">✕</button></div><div class="flex gap-2 mt-4"><input id="cardFilter" placeholder="Search cards…" class="flex-1 rounded-xl bg-slate-900 border border-slate-700 p-3 text-xs text-white"><select id="cardSubjectFilter" class="rounded-xl bg-slate-900 border border-slate-700 p-3 text-xs text-white"><option value="">All subjects</option>${deriveSubjects().map(([x])=>`<option>${escapeHtml(x)}</option>`).join('')}</select></div><div id="cardManagerList" class="space-y-2 mt-4"></div></div>`;document.body.appendChild(m);m.querySelector('.closeHub').onclick=()=>m.remove();const render=()=>{const q=m.querySelector('#cardFilter').value.toLowerCase(),sub=m.querySelector('#cardSubjectFilter').value;const list=userState.cards.filter(c=>(!q||`${c.question} ${c.answer}`.toLowerCase().includes(q))&&(!sub||c.subject===sub));m.querySelector('#cardManagerList').innerHTML=list.slice(0,100).map(c=>`<div class="p-3 rounded-xl bg-slate-900 border border-slate-800"><div class="text-xs font-bold text-white">${escapeHtml(c.question)}</div><div class="text-[11px] text-slate-400 mt-1">${escapeHtml(c.answer)}</div><div class="flex gap-2 mt-2"><button class="study-mini-btn" data-edit="${escapeAttr(c.id)}">Edit</button><button class="study-mini-btn" data-delete="${escapeAttr(c.id)}">Delete</button><span class="text-[10px] text-slate-500 ml-auto">${escapeHtml(c.subject||'General')} ${c.topic?'• '+escapeHtml(c.topic):''}</span></div></div>`).join('')||'<p class="text-xs text-slate-500">No matching cards.</p>';m.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{editCard(b.dataset.edit);render();});m.querySelectorAll('[data-delete]').forEach(b=>b.onclick=()=>{deleteCard(b.dataset.delete);render();});};m.querySelector('#cardFilter').oninput=render;m.querySelector('#cardSubjectFilter').onchange=render;render();}
-        function showTutorSettings(){ensureProState();const m=document.createElement('div');m.className='study-modal show';m.innerHTML=`<div class="study-modal-card max-w-xl"><div class="flex justify-between"><h3 class="text-lg font-bold text-white">Real AI Tutor Connection</h3><button class="closeHub text-slate-400">✕</button></div><p class="text-xs text-slate-400 mt-2">Optional OpenAI-compatible/custom endpoint. Keys are stored only in this browser; do not use secrets in a shared/public HTML file.</p><input id="aiEndpoint" placeholder="https://your-server.example/v1/chat/completions" class="w-full mt-4 rounded-xl bg-slate-900 border border-slate-700 p-3 text-xs text-white"><input id="aiModel" placeholder="Model name" class="w-full mt-2 rounded-xl bg-slate-900 border border-slate-700 p-3 text-xs text-white"><input id="aiKey" type="password" placeholder="Optional API key" class="w-full mt-2 rounded-xl bg-slate-900 border border-slate-700 p-3 text-xs text-white"><button id="saveAISettings" class="mt-3 px-4 py-2 rounded-xl bg-brand-600 text-white text-xs font-bold">Save</button></div>`;document.body.appendChild(m);m.querySelector('#aiEndpoint').value=userState.aiSettings.endpoint||'';m.querySelector('#aiModel').value=userState.aiSettings.model||'';m.querySelector('#aiKey').value=userState.aiSettings.apiKey||'';m.querySelector('.closeHub').onclick=()=>m.remove();m.querySelector('#saveAISettings').onclick=()=>{userState.aiSettings={endpoint:m.querySelector('#aiEndpoint').value.trim(),model:m.querySelector('#aiModel').value.trim()||'gpt-4o-mini',apiKey:m.querySelector('#aiKey').value};savePro();m.remove();updateAIStatus();toast('AI tutor settings saved.','success');};}
+        function showTutorSettings(){ensureProState();const m=document.createElement('div');m.className='study-modal show';m.innerHTML=`<div class="study-modal-card max-w-xl"><div class="flex justify-between"><h3 class="text-lg font-bold text-white">Real AI Tutor Connection</h3><button class="closeHub text-slate-400">✕</button></div><p class="text-xs text-slate-400 mt-2">Optional OpenAI-compatible/custom endpoint. API keys are stored in this browser only. For a public/shared deployment, use a server-side proxy instead of putting a secret key in the browser.</p><input id="aiEndpoint" placeholder="https://your-server.example/v1/chat/completions" class="w-full mt-4 rounded-xl bg-slate-900 border border-slate-700 p-3 text-xs text-white"><input id="aiModel" placeholder="Model name" class="w-full mt-2 rounded-xl bg-slate-900 border border-slate-700 p-3 text-xs text-white"><input id="aiKey" type="password" placeholder="Optional API key" class="w-full mt-2 rounded-xl bg-slate-900 border border-slate-700 p-3 text-xs text-white"><button id="saveAISettings" class="mt-3 px-4 py-2 rounded-xl bg-brand-600 text-white text-xs font-bold">Save</button></div>`;document.body.appendChild(m);m.querySelector('#aiEndpoint').value=userState.aiSettings.endpoint||'';m.querySelector('#aiModel').value=userState.aiSettings.model||'';m.querySelector('#aiKey').value=userState.aiSettings.apiKey||'';m.querySelector('.closeHub').onclick=()=>m.remove();m.querySelector('#saveAISettings').onclick=()=>{userState.aiSettings={endpoint:m.querySelector('#aiEndpoint').value.trim(),model:m.querySelector('#aiModel').value.trim()||'gpt-4o-mini',apiKey:m.querySelector('#aiKey').value};savePro();m.remove();updateAIStatus();toast('AI tutor settings saved.','success');};}
         function updateAIStatus(){const el=document.getElementById('aiStatus');if(el)el.textContent=userState.aiSettings?.endpoint?'Connected endpoint configured.':'No AI endpoint configured — local tutor available.';}
         async function installStudyCraft(){if(window.__studyCraftInstallPrompt){window.__studyCraftInstallPrompt.prompt();const r=await window.__studyCraftInstallPrompt.userChoice;window.__studyCraftInstallPrompt=null;toast(r.outcome==='accepted'?'Install accepted.':'Install dismissed.');}else alert('To install offline/PWA, serve the StudyCraft folder over localhost or HTTPS and choose Install App in the browser.');}
-        function updatePWAStatus(){const el=document.getElementById('pwaStatus');if(!el)return;el.textContent=location.protocol==='file:'?'PWA files included; use localhost/HTTPS to enable installation.':('serviceWorker' in navigator?'Offline/PWA support available.':'Service workers are not supported here.');}
+        function updatePWAStatus(){const el=document.getElementById('pwaStatus');if(!el)return;el.textContent=location.protocol==='file:'?'Use the full folder on localhost/HTTPS to install.':('serviceWorker' in navigator?'Offline app shell available; upload/OCR libraries may still need internet.':'Service workers are not supported here.');}
         window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();window.__studyCraftInstallPrompt=e;updatePWAStatus();});
 
         function initProSuite(){
-            ensureProState(); makeMaterialsTools(); makeStudyCenter(); renderProSuite(); renderSavedNotes();
+            ensureProState(); activeSubjectFilter=userState.studySettings?.activeSubject||'All Subjects'; makeSubjectWorkspace(); makeMaterialsTools(); makeStudyCenter(); renderProSuite(); renderSavedNotes();
             document.getElementById('startExamBtn')?.addEventListener('click',startExamMode);
             document.getElementById('mistakeBtn')?.addEventListener('click',showMistakeBank);
             document.getElementById('plannerBtn')?.addEventListener('click',showPlannerModal);
@@ -2090,7 +2220,11 @@ ${c?c.question+'\n'+c.answer:''}`}]})});if(!res.ok)throw new Error(`AI request f
 
         function enhanceStudyCraft() {
             ensureUserStateShape();
-            if('serviceWorker' in navigator && location.protocol!=='file:'){navigator.serviceWorker.register('./studycraft-sw.js').catch(()=>{});}
+            activeSubjectFilter=userState.studySettings?.activeSubject||'All Subjects';
+            const initialSubjects=subjectNames().filter(x=>x!=='General');
+            if(activeSubjectFilter==='All Subjects' && initialSubjects.length===1){activeSubjectFilter=initialSubjects[0]; userState.studySettings.activeSubject=activeSubjectFilter;}
+            makeSubjectWorkspace();
+            if('serviceWorker' in navigator && location.protocol!=='file:'){navigator.serviceWorker.register('./studycraft-sw.js').then(()=>updatePWAStatus()).catch(()=>{const el=document.getElementById('pwaStatus');if(el)el.textContent='PWA assets not available in this folder. Use the full ZIP package.';});}
             // Normalize streak state for profiles opened after a long gap.
             if (userState.profile.lastActiveDate) {
                 const today = new Date().toISOString().split('T')[0];
