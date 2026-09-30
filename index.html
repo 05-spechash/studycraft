@@ -47,6 +47,7 @@
     <script>
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <style>
         /* Custom Styles & Scrollbars */
         ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -91,6 +92,21 @@
             word-spacing: 0.1em;
             line-height: 1.8;
         }
+
+        /* StudyCraft Pro v2 enhancements */
+        .light-mode { background:#f1f5f9 !important; color:#0f172a !important; }
+        .light-mode .glass-panel { background:rgba(255,255,255,.88) !important; border-color:rgba(15,23,42,.10) !important; }
+        .light-mode .glass-card { background:rgba(255,255,255,.72) !important; border-color:rgba(15,23,42,.08) !important; }
+        .light-mode .text-white { color:#0f172a !important; }
+        .light-mode .text-slate-200, .light-mode .text-slate-300 { color:#334155 !important; }
+        .light-mode .text-slate-400, .light-mode .text-slate-500 { color:#64748b !important; }
+        .light-mode .bg-slate-950 { background:#e2e8f0 !important; }
+        .light-mode .bg-slate-900, .light-mode .bg-slate-800 { background:#f8fafc !important; }
+        .light-mode .border-slate-800, .light-mode .border-slate-700 { border-color:#cbd5e1 !important; }
+        .study-toast { position:fixed; right:20px; bottom:20px; z-index:100; max-width:360px; }
+        .flashcard-enter { animation: cardIn .22s ease-out; }
+        @keyframes cardIn { from { opacity:0; transform:translateY(5px) } to { opacity:1; transform:none } }
+        .kbd { font-family:ui-monospace,SFMono-Regular,monospace; font-size:10px; padding:2px 5px; border:1px solid #475569; border-radius:5px; }
     </style>
 </head>
 <body class="bg-slate-950 text-slate-100 font-sans min-h-screen flex flex-col transition-colors duration-300">
@@ -128,8 +144,11 @@
                 </div>
             </div>
 
-            <!-- Right Controls: Account Switcher & Accessibility -->
+            <!-- Global Search + Right Controls -->
             <div class="flex items-center gap-3">
+                <button id="globalSearchBtn" title="Search everything" class="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl glass-card border border-slate-700 text-slate-400 hover:text-white hover:border-brand-500 transition text-xs">
+                    <i class="fa-solid fa-magnifying-glass"></i><span>Search</span><span class="kbd">/</span>
+                </button>
                 <!-- Dyslexic Toggle -->
                 <button id="dyslexicBtn" title="Toggle Dyslexia Friendly Font" class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition">
                     <i class="fa-solid fa-font"></i>
@@ -295,6 +314,34 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Advanced Analytics Dashboard -->
+                <div class="glass-panel p-5 rounded-2xl">
+                    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+                        <div>
+                            <h3 class="font-bold text-sm text-white"><i class="fa-solid fa-chart-pie text-brand-500 mr-2"></i>Advanced Study Analytics</h3>
+                            <p class="text-xs text-slate-400 mt-1">Your review schedule, retention and quiz performance.</p>
+                        </div>
+                        <span id="dashboardReviewStatus" class="text-xs text-slate-400">Calculating…</span>
+                    </div>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <div class="glass-card p-4 rounded-xl"><p class="text-[11px] text-slate-400">Cards</p><p id="statTotalCards" class="text-2xl font-extrabold text-white">0</p></div>
+                        <div class="glass-card p-4 rounded-xl"><p class="text-[11px] text-slate-400">Due Today</p><p id="statDueCards" class="text-2xl font-extrabold text-accent-amber">0</p></div>
+                        <div class="glass-card p-4 rounded-xl"><p class="text-[11px] text-slate-400">Retention</p><p id="statRetention" class="text-2xl font-extrabold text-accent-emerald">0%</p></div>
+                        <div class="glass-card p-4 rounded-xl"><p class="text-[11px] text-slate-400">Reviews</p><p id="statReviews" class="text-2xl font-extrabold text-brand-500">0</p></div>
+                        <div class="glass-card p-4 rounded-xl"><p class="text-[11px] text-slate-400">Quiz Avg.</p><p id="statQuizAvg" class="text-2xl font-extrabold text-accent-purple">0%</p></div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                        <div class="glass-card p-4 rounded-xl">
+                            <div class="flex justify-between items-center mb-3"><h4 class="text-xs font-bold text-white">Review Distribution</h4><span class="text-[10px] text-slate-500">Leitner boxes</span></div>
+                            <div id="boxDistribution" class="space-y-2"></div>
+                        </div>
+                        <div class="glass-card p-4 rounded-xl">
+                            <div class="flex justify-between items-center mb-3"><h4 class="text-xs font-bold text-white">Weakest Cards</h4><span class="text-[10px] text-slate-500">Needs attention</span></div>
+                            <div id="weakCardsList" class="space-y-2"></div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- TAB 2: MATERIAL & CONTENT STUDIO -->
@@ -307,7 +354,7 @@
                     <div id="dropzone" class="border-2 border-dashed border-slate-700 hover:border-brand-500 rounded-2xl p-8 text-center bg-slate-900/50 hover:bg-slate-900 transition cursor-pointer">
                         <i class="fa-solid fa-cloud-arrow-up text-3xl text-brand-500 mb-2"></i>
                         <p class="text-sm font-semibold text-slate-200">Drag & Drop Study Documents or <span class="text-brand-500">Browse</span></p>
-                        <p class="text-xs text-slate-500 mt-1">Supports PDF, PPTX, TXT formats</p>
+                        <p class="text-xs text-slate-500 mt-1">Supports PDF, PPTX, TXT formats • Multiple files supported</p>
                         <input type="file" id="fileInput" accept=".pdf,.txt,.pptx" class="hidden" multiple>
                     </div>
 
@@ -344,7 +391,8 @@
                 <div class="flex items-center justify-between">
                     <div>
                         <h2 class="text-xl font-bold text-white"><i class="fa-solid fa-layer-group text-accent-amber mr-2"></i> Spaced Repetition Decks</h2>
-                        <p class="text-xs text-slate-400">Leitner 5-Box Spaced Repetition System for maximum memory retention.</p>
+                        <p class="text-xs text-slate-400">Leitner 5-Box Spaced Repetition System with automatic due dates.</p>
+                        <p id="reviewQueueStatus" class="text-[11px] text-accent-amber mt-1">0 due now</p>
                     </div>
                     <button id="addCardManualBtn" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700">+ Add Custom Card</button>
                 </div>
@@ -390,6 +438,7 @@
                     </div>
                     <div class="flex gap-2">
                         <button id="importQuizJsonBtn" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700">Import Quiz JSON</button>
+                        <input type="file" id="quizJsonInput" accept=".json,application/json" class="hidden">
                         <button id="generateQuizFromCards" class="px-3 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white shadow-md">Convert Cards to Quiz</button>
                     </div>
                 </div>
@@ -593,6 +642,34 @@
         </div>
     </div>
 
+    <!-- GLOBAL SEARCH MODAL -->
+    <div id="globalSearchModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 hidden items-start justify-center pt-20 px-4">
+        <div class="glass-panel p-5 rounded-3xl w-full max-w-2xl border border-slate-700 shadow-2xl">
+            <div class="flex items-center gap-3">
+                <i class="fa-solid fa-magnifying-glass text-brand-500"></i>
+                <input id="globalSearchInput" autofocus placeholder="Search flashcards, answers, goals and quiz history…" class="flex-1 bg-transparent outline-none text-sm text-white placeholder:text-slate-500">
+                <button id="closeGlobalSearchBtn" class="p-2 rounded-lg hover:bg-slate-800 text-slate-400"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div id="globalSearchResults" class="mt-4 max-h-[60vh] overflow-y-auto space-y-2"></div>
+        </div>
+    </div>
+
+    <!-- ADD CUSTOM FLASHCARD MODAL -->
+    <div id="manualCardModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center hidden">
+        <div class="glass-panel p-6 rounded-3xl w-full max-w-md border border-slate-700 shadow-2xl">
+            <h3 class="text-lg font-bold text-white mb-1">Add Custom Flashcard</h3>
+            <p class="text-xs text-slate-400 mb-4">Create a question and answer for your current profile.</p>
+            <form id="manualCardForm" class="space-y-4">
+                <textarea id="manualCardQuestion" required rows="3" placeholder="Question / prompt" class="w-full glass-card p-3 rounded-xl text-xs text-white border border-slate-700 outline-none focus:border-brand-500"></textarea>
+                <textarea id="manualCardAnswer" required rows="4" placeholder="Answer / explanation" class="w-full glass-card p-3 rounded-xl text-xs text-white border border-slate-700 outline-none focus:border-brand-500"></textarea>
+                <div class="flex justify-end gap-2">
+                    <button type="button" id="closeCardModalBtn" class="px-4 py-2 rounded-xl bg-slate-800 text-xs font-semibold text-slate-300">Cancel</button>
+                    <button type="submit" class="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-bold text-white">Add Card</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         /* ==========================================================================
            MULTI-USER ACCOUNT STATE MANAGEMENT
@@ -627,6 +704,8 @@
                     { id: 'c2', question: 'What is Photosynthesis?', answer: 'Process by which green plants convert sunlight into chemical energy.', box: 1, lastReviewed: null }
                 ],
                 quizzes: [],
+                quizHistory: [],
+                searchHistory: [],
                 activityHeatmap: Array(28).fill(0)
             };
         }
@@ -665,6 +744,7 @@
             renderGoalsUI();
             renderHeatmapUI();
             updateCardDisplay();
+            if (typeof renderAdvancedDashboard === 'function') renderAdvancedDashboard();
         }
 
         function saveActiveUserData() {
@@ -770,8 +850,21 @@
         }
 
         function recordActivity(xpGain = 10) {
-            userState.profile.xp += xpGain;
-            if (!userState.activityHeatmap) userState.activityHeatmap = Array(28).fill(0);
+            if (!userState) return;
+            const today = new Date().toISOString().split('T')[0];
+            const last = userState.profile.lastActiveDate;
+            if (last !== today) {
+                const prev = last ? new Date(last + 'T00:00:00') : null;
+                const now = new Date(today + 'T00:00:00');
+                const days = prev ? Math.round((now - prev) / 86400000) : 999;
+                if (days === 1) userState.profile.streak = Math.max(1, userState.profile.streak || 1) + 1;
+                else if (days > 1) userState.profile.streak = 1;
+                userState.profile.lastActiveDate = today;
+                if (!Array.isArray(userState.activityHeatmap)) userState.activityHeatmap = Array(28).fill(0);
+                userState.activityHeatmap.shift();
+                userState.activityHeatmap.push(0);
+            }
+            userState.profile.xp += Math.max(0, Number(xpGain) || 0);
             userState.activityHeatmap[userState.activityHeatmap.length - 1] += 1;
             saveActiveUserData();
             renderHeatmapUI();
@@ -935,17 +1028,32 @@
         let currentCardIndex = 0;
         let isFlipped = false;
 
+        function isCardDue(card) {
+            return !card.dueAt || new Date(card.dueAt).getTime() <= Date.now();
+        }
+
+        function getDueCards() {
+            ensureUserStateShape();
+            return userState.cards.filter(isCardDue).sort((a,b) => (new Date(a.dueAt || 0)) - (new Date(b.dueAt || 0)));
+        }
+
+        function updateReviewQueueStatus() {
+            const el=document.getElementById('reviewQueueStatus');
+            if(el) el.innerText=`${getDueCards().length} due now • ${userState.cards.length} total`;
+        }
+
         function updateCardDisplay() {
             if (!userState.cards || userState.cards.length === 0) {
                 document.getElementById('cardContent').innerText = "No cards available. Process notes to create cards.";
+                updateReviewQueueStatus();
                 return;
             }
             if (currentCardIndex >= userState.cards.length) currentCardIndex = 0;
-
             const card = userState.cards[currentCardIndex];
-            document.getElementById('cardBoxTag').innerText = `Box ${card.box}`;
+            document.getElementById('cardBoxTag').innerText = `Box ${card.box}${isCardDue(card) ? ' • DUE' : ''}`;
             document.getElementById('cardContent').innerText = isFlipped ? card.answer : card.question;
             document.getElementById('voiceCardText').innerText = `Prompt: ${card.question}`;
+            updateReviewQueueStatus();
         }
 
         document.getElementById('flashcardBox').addEventListener('click', () => {
@@ -960,14 +1068,32 @@
                 const rating = parseInt(btn.getAttribute('data-rate'));
                 const card = userState.cards[currentCardIndex];
 
+                const oldBox = card.box;
                 if (rating === 1) card.box = 1;
+                else if (rating === 2) card.box = Math.max(1, card.box);
                 else if (rating === 3) card.box = Math.min(5, card.box + 1);
                 else if (rating === 4) card.box = Math.min(5, card.box + 2);
+                const intervals = {1:0, 2:1, 3:3, 4:7, 5:14};
+                let days = intervals[card.box] ?? 1;
+                if (rating === 2) days = Math.max(1, Math.round((intervals[card.box] || 1) * 0.65));
+                if (rating === 1) days = 0;
+                card.intervalDays = days;
+                card.lastReviewed = new Date().toISOString();
+                card.dueAt = new Date(Date.now() + days * 86400000).toISOString();
+                card.reviewCount = (card.reviewCount || 0) + 1;
+                card.lastRating = rating;
+                card.ratingHistory = Array.isArray(card.ratingHistory) ? card.ratingHistory : [];
+                card.ratingHistory.push({rating, date: card.lastReviewed});
+                card.ratingHistory = card.ratingHistory.slice(-100);
+                card.previousBox = oldBox;
 
-                recordActivity(15);
+                recordActivity(rating === 1 ? 5 : rating === 2 ? 10 : rating === 3 ? 15 : 20);
                 isFlipped = false;
-                currentCardIndex = (currentCardIndex + 1) % userState.cards.length;
+                const due = getDueCards();
+                const nextDueIndex = due.length ? userState.cards.indexOf(due[0]) : (currentCardIndex + 1) % userState.cards.length;
+                currentCardIndex = nextDueIndex >= 0 ? nextDueIndex : 0;
                 updateCardDisplay();
+                renderAdvancedDashboard();
             });
         });
 
@@ -981,27 +1107,24 @@
         document.getElementById('generateQuizFromCards').addEventListener('click', generateQuizFromState);
 
         function generateQuizFromState() {
-            if (!userState.cards || userState.cards.length < 2) {
+            ensureUserStateShape();
+            const usable = userState.cards.filter(c => c.question && c.answer);
+            if (usable.length < 2) {
                 alert("Please add or process at least 2 cards to build a SMART quiz!");
                 return;
             }
-
-            activeQuizQuestions = userState.cards.map((card, i) => {
-                // Pick real distractors from other cards in the user's workspace
-                const otherCards = userState.cards.filter((_, idx) => idx !== i);
-                const distractors = otherCards.map(c => c.answer).sort(() => 0.5 - Math.random()).slice(0, 3);
-
-                const options = [card.answer, ...distractors].sort(() => 0.5 - Math.random());
+            const pool = [...usable].sort(() => Math.random() - 0.5).slice(0, Math.min(10, usable.length));
+            activeQuizQuestions = pool.map((card, i) => {
+                const answers = [...new Set(usable.filter(c => c !== card).map(c => c.answer).filter(a => a !== card.answer))];
+                const distractors = answers.sort(() => Math.random() - 0.5).slice(0, 3);
                 return {
                     question: card.question,
                     correctAnswer: card.answer,
-                    options: options
+                    options: [card.answer, ...distractors].sort(() => Math.random() - 0.5)
                 };
             });
-
-            currentQuizIndex = 0;
-            quizScore = 0;
-            renderQuizQuestion();
+            currentQuizIndex = 0; quizScore = 0; renderQuizQuestion();
+            toast(`Generated ${activeQuizQuestions.length} questions.`,'success');
         }
 
         function renderQuizQuestion() {
@@ -1044,7 +1167,14 @@
             if (currentQuizIndex < activeQuizQuestions.length) {
                 renderQuizQuestion();
             } else {
-                alert(`Quiz complete! You scored ${quizScore} XP!`);
+                const total=activeQuizQuestions.length;
+                const correct=Math.round(quizScore/20);
+                userState.quizHistory=userState.quizHistory||[];
+                userState.quizHistory.push({date:new Date().toISOString(),score:Math.round(correct/total*100),correct,total});
+                userState.quizHistory=userState.quizHistory.slice(-50);
+                saveActiveUserData();
+                renderAdvancedDashboard();
+                toast(`Quiz complete: ${correct}/${total} correct (${Math.round(correct/total*100)}%).`,'success');
             }
         });
 
@@ -1155,7 +1285,315 @@
         /* Initialization on Load */
         window.onload = function() {
             initAccountSystem();
+            setTimeout(enhanceStudyCraft, 0);
         };
+
+        /* =====================================================================
+           STUDYCRAFT PRO v2 - missing functionality + quality-of-life features
+           ===================================================================== */
+        function toast(message, type='info') {
+            let el = document.getElementById('studyToast');
+            if (!el) {
+                el = document.createElement('div');
+                el.id = 'studyToast';
+                el.className = 'study-toast';
+                document.body.appendChild(el);
+            }
+            const border = type === 'success' ? 'border-emerald-500/40' : type === 'error' ? 'border-rose-500/40' : 'border-brand-500/40';
+            el.innerHTML = `<div class="glass-panel ${border} rounded-2xl px-4 py-3 shadow-2xl"><p class="text-xs text-slate-200">${escapeHtml(message)}</p></div>`;
+            clearTimeout(window.__toastTimer);
+            window.__toastTimer = setTimeout(() => el.remove(), 3000);
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+        }
+
+        function ensureUserStateShape() {
+            if (!userState) return;
+            userState.profile ||= {};
+            userState.profile.xp = Number(userState.profile.xp) || 0;
+            userState.profile.streak = Number(userState.profile.streak) || 1;
+            userState.cards = Array.isArray(userState.cards) ? userState.cards : [];
+            userState.goals = Array.isArray(userState.goals) ? userState.goals : [];
+            userState.quizHistory = Array.isArray(userState.quizHistory) ? userState.quizHistory : [];
+            userState.searchHistory = Array.isArray(userState.searchHistory) ? userState.searchHistory : [];
+            userState.activityHeatmap = Array.isArray(userState.activityHeatmap) ? userState.activityHeatmap : Array(28).fill(0);
+            userState.activityHeatmap = userState.activityHeatmap.slice(-28);
+            while (userState.activityHeatmap.length < 28) userState.activityHeatmap.unshift(0);
+            userState.cards.forEach(c => { c.box = Math.min(5, Math.max(1, Number(c.box) || 1)); c.reviewCount = Number(c.reviewCount) || 0; c.ratingHistory = Array.isArray(c.ratingHistory) ? c.ratingHistory : []; if (!c.intervalDays) c.intervalDays = [0,1,3,7,14,30][c.box] || 1; if (!('dueAt' in c)) c.dueAt = c.lastReviewed ? new Date(new Date(c.lastReviewed).getTime() + c.intervalDays*86400000).toISOString() : null; });
+        }
+
+        function addCustomCard(question, answer) {
+            ensureUserStateShape();
+            const q = question.trim(), a = answer.trim();
+            if (!q || !a) return false;
+            const duplicate = userState.cards.some(c => c.question.trim().toLowerCase() === q.toLowerCase());
+            if (duplicate) { toast('A card with that question already exists.', 'error'); return false; }
+            userState.cards.push({ id:'card_'+Date.now()+'_'+Math.random().toString(36).slice(2,7), question:q, answer:a, box:1, lastReviewed:null, reviewCount:0 });
+            saveActiveUserData();
+            recordActivity(10);
+            currentCardIndex = userState.cards.length - 1;
+            isFlipped = false;
+            updateCardDisplay();
+            return true;
+        }
+
+        async function processUploadedFile(file) {
+            try {
+                if (file.type === 'text/plain' || file.name.toLowerCase().endsWith('.txt')) {
+                    const text = await file.text();
+                    document.getElementById('rawNotesInput').value = text;
+                    extractConceptsFromText(text);
+                    toast(`Processed ${file.name}`, 'success');
+                    return;
+                }
+                if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+                    if (!window.pdfjsLib) throw new Error('PDF engine failed to load.');
+                    const pdf = await pdfjsLib.getDocument({data: await file.arrayBuffer()}).promise;
+                    let text = '';
+                    for (let pageNo=1; pageNo<=pdf.numPages; pageNo++) {
+                        const page = await pdf.getPage(pageNo);
+                        const content = await page.getTextContent();
+                        text += content.items.map(x => x.str).join(' ') + '\n';
+                    }
+                    if (!text.trim()) throw new Error('No selectable text was found in this PDF.');
+                    document.getElementById('rawNotesInput').value = text.trim();
+                    extractConceptsFromText(text);
+                    toast(`Extracted ${pdf.numPages} PDF page(s)`, 'success');
+                    return;
+                }
+                if (file.name.toLowerCase().endsWith('.pptx')) {
+                    if (!window.JSZip) throw new Error('PPTX parser failed to load.');
+                    const zip = await JSZip.loadAsync(await file.arrayBuffer());
+                    const slideNames = Object.keys(zip.files).filter(n => /^ppt\/slides\/slide\d+\.xml$/i.test(n)).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
+                    let text='';
+                    for (const name of slideNames) {
+                        const xml=await zip.files[name].async('text');
+                        const doc=new DOMParser().parseFromString(xml,'application/xml');
+                        const parts=[...doc.getElementsByTagName('a:t')].map(n=>n.textContent);
+                        if(parts.length) text += parts.join(' ') + '\n';
+                    }
+                    if(!text.trim()) throw new Error('No readable text was found in this PowerPoint.');
+                    document.getElementById('rawNotesInput').value=text.trim();
+                    extractConceptsFromText(text);
+                    toast(`Extracted ${slideNames.length} slide(s)`, 'success');
+                    return;
+                }
+                throw new Error('Unsupported file type.');
+            } catch (err) {
+                toast(err.message || 'Could not process that file.', 'error');
+            }
+        }
+
+        function importQuizJson(file) {
+            const reader = new FileReader();
+            reader.onload = () => {
+                try {
+                    const data = JSON.parse(reader.result);
+                    const list = Array.isArray(data) ? data : (Array.isArray(data.questions) ? data.questions : []);
+                    const normalized = list.map((q, i) => ({
+                        question: String(q.question || q.prompt || '').trim(),
+                        correctAnswer: String(q.correctAnswer || q.answer || q.correct || '').trim(),
+                        options: Array.isArray(q.options) ? q.options.map(String) : []
+                    })).filter(q => q.question && q.correctAnswer && q.options.length >= 2);
+                    if (!normalized.length) throw new Error('No valid questions found.');
+                    activeQuizQuestions = normalized.map(q => ({...q, options:[...new Set([q.correctAnswer, ...q.options])].slice(0,4)}));
+                    currentQuizIndex = 0; quizScore = 0; renderQuizQuestion();
+                    toast(`Imported ${activeQuizQuestions.length} quiz questions.`, 'success');
+                } catch (e) { toast(e.message || 'Invalid quiz JSON.', 'error'); }
+            };
+            reader.readAsText(file);
+        }
+
+        function setupSpeech() {
+            const readBtn = document.getElementById('ttsReadBtn');
+            readBtn?.addEventListener('click', () => {
+                if (!('speechSynthesis' in window)) return toast('Text-to-speech is not supported in this browser.', 'error');
+                const text = document.getElementById('voiceCardText').innerText;
+                speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.rate = 0.95;
+                speechSynthesis.speak(utterance);
+            });
+            const sttBtn = document.getElementById('sttRecordBtn');
+            sttBtn?.addEventListener('click', () => {
+                const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                if (!Recognition) return toast('Speech recognition is not supported in this browser.', 'error');
+                const rec = new Recognition();
+                rec.lang = navigator.language || 'en-US'; rec.interimResults = false; rec.maxAlternatives = 1;
+                document.getElementById('sttStatus').innerText = 'Mic Status: Listening…';
+                rec.onresult = e => {
+                    const answer = e.results[0][0].transcript;
+                    document.getElementById('sttStatus').innerText = `Heard: ${answer}`;
+                    const card = userState?.cards?.[currentCardIndex];
+                    if (card) {
+                        const expected = card.answer.toLowerCase().replace(/[^a-z0-9 ]/g,'');
+                        const spoken = answer.toLowerCase().replace(/[^a-z0-9 ]/g,'');
+                        const words = expected.split(/\s+/).filter(w => w.length > 3);
+                        const hits = words.filter(w => spoken.includes(w)).length;
+                        toast(hits >= Math.max(1, Math.ceil(words.length*.35)) ? 'Your spoken answer contains key concepts.' : 'Try again and include more of the key concepts.', hits >= 1 ? 'success' : 'info');
+                    }
+                };
+                rec.onerror = e => document.getElementById('sttStatus').innerText = `Mic Status: ${e.error || 'Error'}`;
+                rec.onend = () => { if (document.getElementById('sttStatus').innerText === 'Mic Status: Listening…') document.getElementById('sttStatus').innerText='Mic Status: Idle'; };
+                rec.start();
+            });
+        }
+
+        let binauralNodes = null;
+        function toggleBinaural(btn) {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (binauralNodes) {
+                binauralNodes.forEach(n => { try { n.stop?.(); } catch(_){} });
+                binauralNodes = null; btn.innerText='Play'; return;
+            }
+            const left = audioCtx.createOscillator(), right = audioCtx.createOscillator();
+            const lg = audioCtx.createGain(), rg = audioCtx.createGain();
+            const merger = audioCtx.createChannelMerger(2);
+            left.frequency.value=220; right.frequency.value=260; lg.gain.value=.035; rg.gain.value=.035;
+            left.connect(lg).connect(merger,0,0); right.connect(rg).connect(merger,0,1); merger.connect(audioCtx.destination);
+            left.start(); right.start(); binauralNodes=[left,right]; btn.innerText='Stop';
+        }
+
+        function buildMindMap() {
+            const svg = document.getElementById('mindmapSVG'), group = document.getElementById('mindmapGroup');
+            if (!svg || !group) return;
+            const cards = (userState?.cards || []).slice(0,12);
+            const box = svg.getBoundingClientRect(), w=box.width||700, h=box.height||450;
+            group.innerHTML='';
+            const cx=w/2, cy=h/2;
+            const ns='http://www.w3.org/2000/svg';
+            const center=document.createElementNS(ns,'text'); center.setAttribute('x',cx); center.setAttribute('y',cy); center.setAttribute('text-anchor','middle'); center.setAttribute('fill','currentColor'); center.setAttribute('font-size','16'); center.textContent=userState?.profile?.name ? `${userState.profile.name}'s Study Map` : 'Study Map'; group.appendChild(center);
+            cards.forEach((c,i)=>{ const a=(Math.PI*2*i/Math.max(1,cards.length))-Math.PI/2; const x=cx+Math.cos(a)*Math.min(w,h)*.34, y=cy+Math.sin(a)*Math.min(w,h)*.34; const line=document.createElementNS(ns,'line'); line.setAttribute('x1',cx); line.setAttribute('y1',cy); line.setAttribute('x2',x); line.setAttribute('y2',y); line.setAttribute('stroke','#475569'); group.appendChild(line); const t=document.createElementNS(ns,'text'); t.setAttribute('x',x); t.setAttribute('y',y); t.setAttribute('text-anchor','middle'); t.setAttribute('fill','#cbd5e1'); t.setAttribute('font-size','11'); t.textContent=(c.question||'Card').slice(0,32)+(c.question.length>32?'…':''); group.appendChild(t); });
+        }
+
+        /* =====================================================================
+           GLOBAL SEARCH + ADVANCED ANALYTICS + SPACED REPETITION
+           ===================================================================== */
+        function renderAdvancedDashboard() {
+            if (!userState) return;
+            ensureUserStateShape();
+            const cards=userState.cards;
+            const due=cards.filter(isCardDue).length;
+            const reviews=cards.reduce((n,c)=>n+(Number(c.reviewCount)||0),0);
+            const allRatings=cards.flatMap(c=>Array.isArray(c.ratingHistory)?c.ratingHistory.map(r=>Number(r.rating)||0):[]);
+            const retention=allRatings.length ? Math.round(allRatings.filter(r=>r>=3).length/allRatings.length*100) : 0;
+            const total=cards.length;
+            const master=cards.filter(c=>c.box>=4).length;
+            document.getElementById('statTotalCards')?.replaceChildren(document.createTextNode(total));
+            document.getElementById('statDueCards')?.replaceChildren(document.createTextNode(due));
+            document.getElementById('statRetention')?.replaceChildren(document.createTextNode(`${retention}%`));
+            document.getElementById('statReviews')?.replaceChildren(document.createTextNode(reviews));
+            const quizScores=(userState.quizHistory||[]).map(h=>Number(h.score)||0);
+            const quizAvg=quizScores.length?Math.round(quizScores.reduce((a,b)=>a+b,0)/quizScores.length):0;
+            document.getElementById('statQuizAvg')?.replaceChildren(document.createTextNode(`${quizAvg}%`));
+            const status=document.getElementById('dashboardReviewStatus');
+            if(status) status.innerText=due ? `${due} cards need review today` : 'All caught up 🎉';
+            const dist=document.getElementById('boxDistribution');
+            if(dist){
+                const max=Math.max(1,total);
+                dist.innerHTML=[1,2,3,4,5].map(b=>{const n=cards.filter(c=>c.box===b).length; return `<div class="flex items-center gap-2"><span class="w-10 text-[10px] text-slate-400">Box ${b}</span><div class="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden"><div class="h-full bg-brand-500 rounded-full" style="width:${Math.round(n/max*100)}%"></div></div><span class="w-6 text-right text-[10px] text-slate-400">${n}</span></div>`}).join('');
+            }
+            const weak=document.getElementById('weakCardsList');
+            if(weak){
+                const list=[...cards].sort((a,b)=>(a.box-b.box)||(Number(a.reviewCount)-Number(b.reviewCount))).slice(0,5);
+                weak.innerHTML=list.length ? list.map(c=>`<button class="w-full text-left p-2 rounded-lg hover:bg-slate-800 transition" onclick="jumpToCard('${String(c.id).replace(/'/g,"\\'")}')"><div class="flex justify-between gap-2"><span class="text-[11px] text-slate-200 truncate">${escapeHtml(c.question)}</span><span class="text-[10px] text-rose-400 shrink-0">Box ${c.box}</span></div></button>`).join('') : '<p class="text-xs text-slate-500">No cards yet.</p>';
+            }
+            renderHeatmapUI();
+        }
+
+        window.jumpToCard=function(id){
+            const idx=(userState.cards||[]).findIndex(c=>c.id===id);
+            if(idx<0) return;
+            currentCardIndex=idx; isFlipped=false;
+            document.querySelector('[data-tab="tab-flashcards"]')?.click();
+            updateCardDisplay();
+        };
+
+        function openGlobalSearch(){
+            const m=document.getElementById('globalSearchModal');
+            if(!m) return;
+            m.classList.remove('hidden'); m.classList.add('flex');
+            const input=document.getElementById('globalSearchInput'); input.value=''; renderSearchResults(''); setTimeout(()=>input.focus(),30);
+        }
+        function closeGlobalSearch(){ const m=document.getElementById('globalSearchModal'); m?.classList.add('hidden'); m?.classList.remove('flex'); }
+        function renderSearchResults(query){
+            ensureUserStateShape();
+            const q=query.trim().toLowerCase();
+            const results=[];
+            userState.cards.forEach(c=>{ if(!q || `${c.question} ${c.answer}`.toLowerCase().includes(q)) results.push({type:'Flashcard',title:c.question,detail:c.answer,id:c.id,icon:'fa-layer-group'}); });
+            userState.goals.forEach(g=>{ if(!q || `${g.subject}`.toLowerCase().includes(q)) results.push({type:'Goal',title:g.subject,detail:`${g.progress}% / ${g.target}%`,icon:'fa-bullseye'}); });
+            (userState.quizHistory||[]).forEach((h,i)=>{ if(!q || JSON.stringify(h).toLowerCase().includes(q)) results.push({type:'Quiz',title:`Quiz — ${h.score ?? 0}%`,detail:`${h.correct ?? 0}/${h.total ?? 0} correct`,icon:'fa-circle-question'}); });
+            const out=document.getElementById('globalSearchResults');
+            if(!results.length){ out.innerHTML='<div class="p-8 text-center text-xs text-slate-500">No results found.</div>'; return; }
+            out.innerHTML=results.slice(0,40).map(r=>`<button class="w-full text-left p-3 rounded-xl glass-card hover:bg-slate-800 transition flex gap-3" ${r.id?`onclick="jumpToCard('${String(r.id).replace(/'/g,"\\'")}');closeGlobalSearch()"`:''}><i class="fa-solid ${r.icon} text-brand-500 mt-0.5"></i><span class="min-w-0"><span class="block text-[10px] uppercase tracking-wide text-slate-500">${r.type}</span><span class="block text-xs font-semibold text-white truncate">${escapeHtml(r.title)}</span><span class="block text-[11px] text-slate-400 truncate">${escapeHtml(r.detail)}</span></span></button>`).join('');
+        }
+
+        function initAdvancedFeatures(){
+            document.getElementById('globalSearchBtn')?.addEventListener('click',openGlobalSearch);
+            document.getElementById('closeGlobalSearchBtn')?.addEventListener('click',closeGlobalSearch);
+            document.getElementById('globalSearchModal')?.addEventListener('click',e=>{if(e.target.id==='globalSearchModal')closeGlobalSearch();});
+            document.getElementById('globalSearchInput')?.addEventListener('input',e=>renderSearchResults(e.target.value));
+            document.addEventListener('keydown',e=>{if(e.key==='/' && !['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)){e.preventDefault();openGlobalSearch();} if(e.key==='Escape')closeGlobalSearch();});
+            renderAdvancedDashboard();
+        }
+
+        function enhanceStudyCraft() {
+            ensureUserStateShape();
+            // Normalize streak state for profiles opened after a long gap.
+            if (userState.profile.lastActiveDate) {
+                const today = new Date().toISOString().split('T')[0];
+                const d = Math.round((new Date(today+'T00:00:00') - new Date(userState.profile.lastActiveDate+'T00:00:00')) / 86400000);
+                if (d > 1) userState.profile.streak = 1;
+            }
+            // Fix imported/old profiles and keep the UI in sync.
+            renderUserProfileUI(); renderGoalsUI(); renderHeatmapUI(); updateCardDisplay();
+
+            // Theme persistence
+            const savedTheme=localStorage.getItem('studycraft_theme') || 'dark';
+            if(savedTheme==='light') document.body.classList.add('light-mode');
+            document.getElementById('themeToggleBtn')?.addEventListener('click',()=>{ document.body.classList.toggle('light-mode'); localStorage.setItem('studycraft_theme',document.body.classList.contains('light-mode')?'light':'dark'); });
+            document.getElementById('dyslexicBtn')?.addEventListener('click',()=>localStorage.setItem('studycraft_dyslexic',document.body.classList.contains('font-dyslexic')?'on':'off'));
+            if(localStorage.getItem('studycraft_dyslexic')==='on') document.body.classList.add('font-dyslexic');
+
+            // Manual card modal
+            document.getElementById('addCardManualBtn')?.addEventListener('click',()=>document.getElementById('manualCardModal').classList.remove('hidden'));
+            document.getElementById('closeCardModalBtn')?.addEventListener('click',()=>document.getElementById('manualCardModal').classList.add('hidden'));
+            document.getElementById('manualCardForm')?.addEventListener('submit',e=>{e.preventDefault(); const ok=addCustomCard(document.getElementById('manualCardQuestion').value,document.getElementById('manualCardAnswer').value); if(ok){e.target.reset(); document.getElementById('manualCardModal').classList.add('hidden'); toast('Flashcard added.','success');}});
+
+            // File uploads
+            document.getElementById('dropzone')?.addEventListener('click',()=>document.getElementById('fileInput').click());
+            document.getElementById('fileInput')?.addEventListener('change',async e=>{for(const file of e.target.files) await processUploadedFile(file); e.target.value='';});
+            document.getElementById('dropzone')?.addEventListener('dragover',e=>{e.preventDefault(); e.currentTarget.classList.add('border-brand-500');});
+            document.getElementById('dropzone')?.addEventListener('dragleave',e=>e.currentTarget.classList.remove('border-brand-500'));
+            document.getElementById('dropzone')?.addEventListener('drop',async e=>{e.preventDefault(); e.currentTarget.classList.remove('border-brand-500'); for(const file of e.dataTransfer.files) await processUploadedFile(file);});
+
+            document.getElementById('importQuizJsonBtn')?.addEventListener('click',()=>document.getElementById('quizJsonInput').click());
+            document.getElementById('quizJsonInput')?.addEventListener('change',e=>{const f=e.target.files[0]; if(f) importQuizJson(f); e.target.value='';});
+            document.getElementById('rebuildMindMapBtn')?.addEventListener('click',buildMindMap);
+            document.querySelector('[data-tab="tab-mindmap"]')?.addEventListener('click',()=>setTimeout(buildMindMap,50));
+            document.getElementById('toggleBinaural')?.addEventListener('click',function(){toggleBinaural(this);});
+            setupSpeech();
+
+            // Better cloze feedback: track revealed blanks.
+            document.getElementById('renderClozeBtn')?.addEventListener('click',()=>setTimeout(()=>toast('Click each blank to reveal the answer.'),0));
+
+            // Keyboard shortcuts
+            document.addEventListener('keydown',e=>{
+                if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)) return;
+                if(e.key===' '){ e.preventDefault(); document.getElementById('flashcardBox')?.click(); }
+                if(e.key==='1') document.querySelector('.rate-btn[data-rate="1"]')?.click();
+                if(e.key==='2') document.querySelector('.rate-btn[data-rate="2"]')?.click();
+                if(e.key==='3') document.querySelector('.rate-btn[data-rate="3"]')?.click();
+                if(e.key==='4') document.querySelector('.rate-btn[data-rate="4"]')?.click();
+                if(e.key.toLowerCase()==='n') document.getElementById('nextQuizBtn')?.click();
+            });
+            buildMindMap();
+            initAdvancedFeatures();
+            toast('StudyCraft is ready. Search with /, and review due cards for spaced repetition.');
+        }
+
     </script>
 </body>
 </html>
