@@ -1213,25 +1213,120 @@
 
         document.getElementById('generateQuizFromCards').addEventListener('click', generateQuizFromState);
 
+        /* ==========================================================================
+           QUIZ RELEVANCE ENGINE
+           Distractors must be related to the same concept/topic. Random answers from
+           unrelated cards are never used just to fill four buttons.
+           ========================================================================== */
+        const QUIZ_STOPWORDS = new Set('what is are was were the a an of to in on for from by and or how why when where which who does do did with this that these those explain define give name list describe identify state tell you about'.split(/\s+/));
+
+        function quizTokens(text) {
+            return new Set(String(text || '').toLowerCase()
+                .replace(/https?:\/\/\S+/g, ' ')
+                .replace(/[^a-z0-9\s-]/g, ' ')
+                .split(/\s+/)
+                .filter(w => w.length > 2 && !QUIZ_STOPWORDS.has(w)));
+        }
+
+        function tokenSimilarity(a, b) {
+            const A = quizTokens(a), B = quizTokens(b);
+            if (!A.size || !B.size) return 0;
+            let common = 0;
+            A.forEach(x => { if (B.has(x)) common++; });
+            return common / Math.sqrt(A.size * B.size);
+        }
+
+        function normalizedAnswer(answer) {
+            return String(answer || '').replace(/\s+/g, ' ').trim();
+        }
+
+        function scoreDistractor(target, candidate) {
+            if (!candidate || candidate === target) return -Infinity;
+            const tq = tokenSimilarity(target.question, candidate.question);
+            const ta = tokenSimilarity(target.question, candidate.answer);
+            const aa = tokenSimilarity(target.answer, candidate.answer);
+            const qa = tokenSimilarity(target.answer, candidate.question);
+            const sameSource = target.source && candidate.source && target.source === candidate.source ? 0.18 : 0;
+            const sameTopic = target.topic && candidate.topic && target.topic.toLowerCase() === candidate.topic.toLowerCase() ? 0.35 : 0;
+
+            // Strongly prefer conceptually related cards. Similar answer wording alone
+            // is not enough because it can create near-duplicate correct answers.
+            let score = (tq * 1.5) + (ta * 1.1) + (aa * 0.65) + (qa * 0.35) + sameSource + sameTopic;
+
+            // Avoid absurdly different answer sizes. A one-word answer beside a paragraph
+            // is usually an obviously bad distractor.
+            const targetWords = normalizedAnswer(target.answer).split(/\s+/).length;
+            const candWords = normalizedAnswer(candidate.answer).split(/\s+/).length;
+            const ratio = Math.min(targetWords, candWords) / Math.max(targetWords, candWords, 1);
+            if (ratio < 0.2) score -= 0.25;
+            if (ratio >= 0.45) score += 0.08;
+
+            return score;
+        }
+
+        function getRelevantDistractors(target, candidates, wanted = 3) {
+            const ranked = candidates
+                .filter(c => c !== target && normalizedAnswer(c.answer) !== normalizedAnswer(target.answer))
+                .map(c => ({ card:c, score:scoreDistractor(target,c) }))
+                .filter(x => x.score >= 0.20)
+                .sort((a,b) => b.score - a.score);
+
+            const selected = [];
+            for (const item of ranked) {
+                // Don't include two distractors that are essentially the same answer.
+                if (selected.some(x => tokenSimilarity(x.answer, item.card.answer) > 0.78)) continue;
+                selected.push(item.card);
+                if (selected.length >= wanted) break;
+            }
+            return selected;
+        }
+
         function generateQuizFromState() {
             ensureUserStateShape();
-            const usable = userState.cards.filter(c => c.question && c.answer);
+            const usable = userState.cards.filter(c => c.question && c.answer && normalizedAnswer(c.answer).length > 1);
             if (usable.length < 2) {
-                alert("Please add or process at least 2 cards to build a SMART quiz!");
+                alert('Please add or process at least 2 useful cards to build a quiz.');
                 return;
             }
-            const pool = [...usable].sort(() => Math.random() - 0.5).slice(0, Math.min(10, usable.length));
-            activeQuizQuestions = pool.map((card, i) => {
-                const answers = [...new Set(usable.filter(c => c !== card).map(c => c.answer).filter(a => a !== card.answer))];
-                const distractors = answers.sort(() => Math.random() - 0.5).slice(0, 3);
-                return {
-                    question: card.question,
-                    correctAnswer: card.answer,
-                    options: [card.answer, ...distractors].sort(() => Math.random() - 0.5)
-                };
-            });
-            currentQuizIndex = 0; quizScore = 0; renderQuizQuestion();
-            toast(`Generated ${activeQuizQuestions.length} questions.`,'success');
+
+            const shuffled = [...usable].sort(() => Math.random() - 0.5);
+            const questions = [];
+
+            for (const card of shuffled) {
+                // Try to find three genuinely related distractors. If there are not
+                // enough, use two, then one. Never pad with an unrelated answer.
+                const distractors = getRelevantDistractors(card, usable, 3);
+                if (distractors.length < 1) continue;
+
+                const options = [normalizedAnswer(card.answer), ...distractors.map(d => normalizedAnswer(d.answer))]
+                    .filter((v,i,a) => a.indexOf(v) === i)
+                    .sort(() => Math.random() - 0.5);
+
+                // A 3-option question is preferable to a 4-option question containing
+                // a nonsense distractor.
+                if (options.length < 2) continue;
+
+                questions.push({
+                    question: String(card.question).trim(),
+                    correctAnswer: normalizedAnswer(card.answer),
+                    options,
+                    sourceCardId: card.id,
+                    topic: card.topic || '',
+                    difficulty: card.difficulty || 'mixed'
+                });
+                if (questions.length >= 10) break;
+            }
+
+            if (!questions.length) {
+                toast('I could not find enough related material to make a reliable MCQ quiz. Add more cards from the same topic.', 'error');
+                return;
+            }
+
+            activeQuizQuestions = questions;
+            currentQuizIndex = 0;
+            quizScore = 0;
+            renderQuizQuestion();
+            toast(`Generated ${questions.length} topic-relevant questions.`, 'success');
         }
 
         function renderQuizQuestion() {
@@ -1994,3 +2089,4 @@
     </script>
 </body>
 </html>
+
