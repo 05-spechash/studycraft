@@ -355,8 +355,8 @@
                     <div id="dropzone" class="border-2 border-dashed border-slate-700 hover:border-brand-500 rounded-2xl p-8 text-center bg-slate-900/50 hover:bg-slate-900 transition cursor-pointer">
                         <i class="fa-solid fa-cloud-arrow-up text-3xl text-brand-500 mb-2"></i>
                         <p class="text-sm font-semibold text-slate-200">Drag & Drop Study Documents or <span class="text-brand-500">Browse</span></p>
-                        <p class="text-xs text-slate-500 mt-1">Supports PDF, PPTX, TXT formats • Multiple files supported</p>
-                        <input type="file" id="fileInput" accept=".pdf,.txt,.pptx" class="hidden" multiple>
+                        <p class="text-xs text-slate-500 mt-1">Supports PDF, PPTX, DOCX, TXT & images • OCR • Multiple files supported</p>
+                        <input type="file" id="fileInput" accept=".pdf,.txt,.pptx,.docx,.png,.jpg,.jpeg,.webp" class="hidden" multiple>
                     </div>
 
                     <div class="mt-4 flex items-center gap-3">
@@ -989,6 +989,7 @@
             extractConceptsFromText(text);
         });
 
+        let currentImportSourceName = "";
         function extractConceptsFromText(text) {
             // Improved study-card extraction: preserve slide/line structure,
             // split long OCR/PPT text into atomic facts, and avoid giant cards.
@@ -1102,7 +1103,11 @@
                     reviewCount: 0,
                     reviewHistory: [],
                     dueAt: null,
-                    source: 'material'
+                    source: 'material',
+                    sourceName: currentImportSourceName || 'Pasted material',
+                    subject: currentImportSourceName ? (currentImportSourceName.split('.')[0].replace(/[_-]+/g,' ').split(/\s+/).slice(0,3).join(' ') || 'General') : 'General',
+                    tags: [],
+                    topic: ''
                 });
 
                 const tag = document.createElement('span');
@@ -1510,6 +1515,7 @@
 
         async function processUploadedFile(file) {
             try {
+                currentImportSourceName = file.name;
                 const lowerName = file.name.toLowerCase();
                 if (file.type === 'text/plain' || lowerName.endsWith('.txt')) {
                     const text = await file.text();
@@ -1569,7 +1575,32 @@
                     toast(`Processed ${slideNames.length} slide(s) + ${mediaNames.length} image(s)`, 'success');
                     return;
                 }
-                throw new Error('Unsupported file type. Please upload PDF, PPTX, or TXT.');
+                if (lowerName.endsWith('.docx')) {
+                    if (!window.JSZip) throw new Error('DOCX parser failed to load.');
+                    const zip = await JSZip.loadAsync(await file.arrayBuffer());
+                    const xml = zip.files['word/document.xml'] ? await zip.files['word/document.xml'].async('text') : '';
+                    if (!xml) throw new Error('No readable Word document content found.');
+                    const doc = new DOMParser().parseFromString(xml, 'application/xml');
+                    const parts = [...doc.getElementsByTagName('w:t')].map(n=>n.textContent).filter(Boolean);
+                    const text = parts.join('\n');
+                    if (!text.trim()) throw new Error('No readable text found in this DOCX.');
+                    document.getElementById('rawNotesInput').value = text.trim();
+                    extractConceptsFromText(text);
+                    toast(`Processed Word document: ${file.name}`, 'success');
+                    return;
+                }
+                if (/^image\//i.test(file.type) || /\.(png|jpe?g|webp)$/i.test(lowerName)) {
+                    if (!window.Tesseract) throw new Error('OCR engine failed to load.');
+                    toast(`OCR: reading ${file.name}…`);
+                    const result = await Tesseract.recognize(file, 'eng', { logger: m => { if (m.status === 'recognizing text' && m.progress) toast(`OCR: ${Math.round(m.progress*100)}%`); } });
+                    const text = result.data.text || '';
+                    if (!text.trim()) throw new Error('OCR could not find readable text in this image.');
+                    document.getElementById('rawNotesInput').value = text.trim();
+                    extractConceptsFromText(text);
+                    toast(`OCR processed ${file.name}`, 'success');
+                    return;
+                }
+                throw new Error('Unsupported file type. Please upload PDF, PPTX, DOCX, TXT, or an image.');
             } catch (err) {
                 console.error(err);
                 toast(err.message || 'Could not process that file.', 'error');
@@ -1729,6 +1760,181 @@
             renderAdvancedDashboard();
         }
 
+
+        /* =====================================================================
+           STUDYCRAFT PRO SUITE - organization, exam mode, planner, mistakes,
+           written practice, achievements, backups, accessibility and AI-ready tutor
+           ===================================================================== */
+        function ensureProState(){
+            ensureUserStateShape();
+            userState.profile ||= {};
+            userState.cards ||= [];
+            userState.quizHistory ||= [];
+            userState.planner ||= [];
+            userState.achievements ||= {};
+            userState.dailyChallenge ||= {date:'', done:0};
+            userState.subjects ||= [];
+            userState.notes = Array.isArray(userState.notes) ? userState.notes : [];
+            userState.cards.forEach(c=>{
+                c.tags=Array.isArray(c.tags)?c.tags:[];
+                c.subject=c.subject||'General';
+                c.topic=c.topic||'';
+                c.sourceName=c.sourceName||'';
+                c.ratingHistory=Array.isArray(c.ratingHistory)?c.ratingHistory:[];
+                c.reviewHistory=Array.isArray(c.reviewHistory)?c.reviewHistory:[];
+            });
+        }
+        function savePro(){ ensureProState(); saveActiveUserData(); renderProSuite(); renderAdvancedDashboard(); }
+        function escapeAttr(v){ return String(v??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+        function cardWeakness(c){
+            const h=(c.ratingHistory||[]).map(x=>Number(x.rating)||0);
+            const misses=h.filter(x=>x<3).length;
+            return misses*3 + Math.max(0,5-(Number(c.box)||1)) + (h.length?Math.max(0,2-(h[h.length-1]||0)):1);
+        }
+        function getMistakeCards(){ return (userState.cards||[]).filter(c=>(c.ratingHistory||[]).some(x=>Number(x.rating)<3)); }
+        function deriveSubjects(){
+            const counts={};
+            (userState.cards||[]).forEach(c=>counts[c.subject||'General']=(counts[c.subject||'General']||0)+1);
+            return Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+        }
+        function achievementList(){
+            const cards=userState.cards||[], reviews=cards.reduce((n,c)=>n+(Number(c.reviewCount)||0),0), q=userState.quizHistory||[];
+            const vals=[
+                ['first_review','First Review',reviews>=1,'Complete your first review'],
+                ['25_reviews','25 Reviews',reviews>=25,'Review 25 cards'],
+                ['100_reviews','100 Reviews',reviews>=100,'Review 100 cards'],
+                ['perfect_quiz','Perfect Quiz',q.some(x=>Number(x.score)>=100),'Score 100% on a quiz'],
+                ['five_mastered','5 Mastered',cards.filter(c=>Number(c.box)>=5).length>=5,'Master 5 cards'],
+                ['week_streak','7 Day Streak',Number(userState.profile.streak)>=7,'Reach a 7-day streak']
+            ];
+            return vals;
+        }
+        function updateAchievements(){
+            achievementList().forEach(a=>{ if(a[2]) userState.achievements[a[0]]=true; });
+        }
+        function makeMaterialsTools(){
+            const tab=document.getElementById('tab-content'); if(!tab || document.getElementById('materialsProTools')) return;
+            const box=document.createElement('div'); box.id='materialsProTools'; box.className='glass-panel p-5 rounded-2xl';
+            box.innerHTML=`<div class="flex flex-wrap justify-between gap-3 items-center"><div><h3 class="text-sm font-bold text-white"><i class="fa-solid fa-toolbox text-brand-500 mr-2"></i>Study Tools</h3><p class="text-xs text-slate-400 mt-1">Save notes, organize imports and protect your study data.</p></div><div class="flex flex-wrap gap-2"><button id="saveNotesBtn" class="px-3 py-2 rounded-lg bg-brand-600 text-xs text-white">Save Note</button><button id="exportEverythingBtn" class="px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-xs text-slate-200">Export Backup</button><button id="installHelpBtn" class="px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-xs text-slate-200">Offline Info</button></div></div><div id="savedNotesList" class="grid md:grid-cols-2 gap-2 mt-4"></div>`;
+            tab.appendChild(box);
+            document.getElementById('saveNotesBtn').onclick=saveCurrentNote;
+            document.getElementById('exportEverythingBtn').onclick=exportAllStudyData;
+            document.getElementById('installHelpBtn').onclick=()=>alert('StudyCraft stores cards, reviews, goals and notes locally in your browser. Full offline/PWA installation requires opening the HTML from a local web server rather than file://.');
+        }
+        function saveCurrentNote(){
+            ensureProState(); const text=document.getElementById('rawNotesInput')?.value.trim(); if(!text){toast('Paste or upload notes first.','error');return;}
+            const title=prompt('Note title:',currentImportSourceName||'Study Note'); if(!title?.trim())return;
+            userState.notes=Array.isArray(userState.notes)?userState.notes:[]; userState.notes.unshift({id:'note_'+Date.now(),title:title.trim(),text,createdAt:new Date().toISOString()}); userState.notes=userState.notes.slice(0,50); savePro(); toast('Note saved.','success');
+        }
+        function renderSavedNotes(){
+            const el=document.getElementById('savedNotesList'); if(!el)return; const notes=userState.notes||[];
+            el.innerHTML=notes.length?notes.slice(0,8).map(n=>`<button class="text-left p-3 rounded-xl bg-slate-900/50 border border-slate-800 hover:border-brand-500" onclick="document.getElementById('rawNotesInput').value=${JSON.stringify(n.text)};document.querySelector('[data-tab=\"tab-content\"]')?.click()"><span class="block text-xs font-semibold text-white">${escapeHtml(n.title)}</span><span class="block text-[10px] text-slate-500 mt-1">${new Date(n.createdAt).toLocaleDateString()}</span></button>`).join(''):'<p class="text-xs text-slate-500">No saved notes yet.</p>';
+        }
+        function makeProPanel(){
+            const dash=document.getElementById('tab-dashboard'); if(!dash || document.getElementById('proSuitePanel')) return;
+            const panel=document.createElement('div'); panel.id='proSuitePanel'; panel.className='glass-panel p-5 rounded-2xl';
+            panel.innerHTML=`
+              <div class="flex flex-wrap justify-between items-center gap-3 mb-4">
+                <div><h3 class="font-bold text-sm text-white"><i class="fa-solid fa-wand-magic-sparkles text-brand-500 mr-2"></i>StudyCraft Pro Suite</h3><p class="text-xs text-slate-400 mt-1">Turn your material into an organized, adaptive study system.</p></div>
+                <div class="flex flex-wrap gap-2"><button id="startExamBtn" class="px-3 py-2 rounded-xl bg-brand-600 text-xs font-bold text-white">Exam Mode</button><button id="mistakeBtn" class="px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs text-slate-200">Mistake Bank</button><button id="plannerBtn" class="px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs text-slate-200">Study Planner</button></div>
+              </div>
+              <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <div class="glass-card p-4 rounded-xl"><h4 class="text-xs font-bold text-white mb-2">Subjects & Topics</h4><div id="proSubjects" class="space-y-2"></div><button id="addSubjectBtn" class="mt-3 text-xs text-brand-400">+ Add subject</button></div>
+                <div class="glass-card p-4 rounded-xl"><h4 class="text-xs font-bold text-white mb-2">Today's Mission</h4><div id="dailyMission" class="text-xs text-slate-300"></div><div class="h-2 bg-slate-800 rounded-full mt-3 overflow-hidden"><div id="missionBar" class="h-full bg-brand-500" style="width:0%"></div></div><button id="missionBtn" class="mt-3 px-3 py-2 rounded-lg bg-slate-800 text-xs text-slate-200">Start mission</button></div>
+                <div class="glass-card p-4 rounded-xl"><h4 class="text-xs font-bold text-white mb-2">Achievements</h4><div id="achievementGrid" class="grid grid-cols-2 gap-2"></div></div>
+              </div>
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+                <div class="glass-card p-4 rounded-xl"><div class="flex justify-between items-center mb-2"><h4 class="text-xs font-bold text-white">Mistakes to Fix</h4><span id="mistakeCount" class="text-[10px] text-rose-400"></span></div><div id="proMistakes" class="space-y-1"></div></div>
+                <div class="glass-card p-4 rounded-xl"><h4 class="text-xs font-bold text-white mb-2">Written Practice</h4><p class="text-[11px] text-slate-400 mb-3">Practice short answers from your cards and get local structure feedback.</p><button id="writtenPracticeBtn" class="px-3 py-2 rounded-lg bg-brand-600 text-xs text-white">Start written practice</button></div>
+              </div>`;
+            dash.appendChild(panel);
+        }
+        function renderProSuite(){
+            ensureProState(); makeProPanel(); updateAchievements();
+            const subjects=document.getElementById('proSubjects');
+            if(subjects) subjects.innerHTML=deriveSubjects().map(([s,n])=>`<div class="flex justify-between items-center p-2 rounded-lg bg-slate-900/50"><span class="text-[11px] text-slate-200">${escapeHtml(s)}</span><span class="text-[10px] text-slate-500">${n} cards</span></div>`).join('') || '<p class="text-xs text-slate-500">No subjects yet. Add one or upload material.</p>';
+            const mistakes=getMistakeCards();
+            document.getElementById('mistakeCount')?.replaceChildren(document.createTextNode(`${mistakes.length} cards`));
+            const ml=document.getElementById('proMistakes');
+            if(ml) ml.innerHTML=mistakes.slice(0,5).map(c=>`<button class="w-full text-left p-2 rounded-lg hover:bg-slate-800" onclick="jumpToCard('${String(c.id).replace(/'/g,"\\'")}')"><span class="block text-[11px] text-slate-200 truncate">${escapeHtml(c.question)}</span><span class="text-[10px] text-rose-400">${(c.ratingHistory||[]).filter(x=>x.rating<3).length} misses</span></button>`).join('') || '<p class="text-xs text-emerald-400">No mistakes recorded yet.</p>';
+            const grid=document.getElementById('achievementGrid');
+            if(grid) grid.innerHTML=achievementList().map(a=>`<div class="p-2 rounded-lg ${a[2]?'bg-brand-500/10 border border-brand-500/20':'bg-slate-900/50 border border-slate-800'}"><div class="text-[11px] font-semibold ${a[2]?'text-brand-300':'text-slate-500'}">${a[1]}</div><div class="text-[9px] text-slate-500 mt-1">${a[3]}</div></div>`).join('');
+            const today=new Date().toISOString().slice(0,10);
+            if(userState.dailyChallenge?.date!==today) userState.dailyChallenge={date:today,done:0};
+            const mission=document.getElementById('dailyMission');
+            if(mission) mission.innerHTML=`Review 5 cards, then complete 1 quiz.<br><span class="text-brand-400">${Math.min(2,userState.dailyChallenge.done)}/2 tasks complete</span>`;
+            document.getElementById('missionBar')?.style.setProperty('width',`${Math.min(100,(Math.min(2,userState.dailyChallenge.done)/2)*100)}%`);
+            renderSavedNotes();
+        }
+        function addSubject(){
+            const name=prompt('Subject name:'); if(!name?.trim()) return;
+            userState.subjects.push({id:'sub_'+Date.now(),name:name.trim()}); savePro(); toast('Subject added.','success');
+        }
+        function showMistakeBank(){
+            const mistakes=getMistakeCards();
+            if(!mistakes.length){toast('Your mistake bank is empty.','success');return;}
+            currentCardIndex=(userState.cards||[]).findIndex(c=>c.id===mistakes[0].id); isFlipped=false;
+            document.querySelector('[data-tab="tab-flashcards"]')?.click(); updateCardDisplay(); toast(`Starting mistake review with ${mistakes.length} cards.`);
+        }
+        function showPlanner(){
+            const date=prompt('Exam date (YYYY-MM-DD):'); if(!date) return;
+            const topics=prompt('Topics to study (comma separated):'); if(!topics) return;
+            userState.planner.push({id:'plan_'+Date.now(),examDate:date,topics:topics.split(',').map(x=>x.trim()).filter(Boolean),createdAt:new Date().toISOString()}); savePro();
+            alert(`Plan saved for ${date}. Topics: ${topics}`);
+        }
+        function startExamMode(){
+            const cards=(userState.cards||[]).filter(c=>c.question&&c.answer); if(cards.length<2){toast('Add at least 2 cards first.','error');return;}
+            const count=Math.min(20,Number(prompt(`How many questions? (2-${Math.min(20,cards.length)})`))||10); const qs=[...cards].sort(()=>Math.random()-.5).slice(0,count);
+            const overlay=document.createElement('div'); overlay.id='examOverlay'; overlay.className='fixed inset-0 z-[90] bg-slate-950/95 flex items-center justify-center p-4';
+            let i=0,score=0,start=Date.now();
+            function render(){
+              const c=qs[i]; const others=cards.filter(x=>x.id!==c.id).sort(()=>Math.random()-.5).slice(0,3).map(x=>x.answer); const opts=[c.answer,...others].sort(()=>Math.random()-.5);
+              overlay.innerHTML=`<div class="w-full max-w-2xl glass-panel p-6 rounded-3xl"><div class="flex justify-between text-xs text-slate-400"><span>Exam ${i+1}/${qs.length}</span><span id="examTimer">${Math.floor((Date.now()-start)/1000)}s</span></div><h2 class="text-xl font-bold text-white mt-6">${escapeHtml(c.question)}</h2><div class="grid gap-3 mt-6">${opts.map((o,j)=>`<button class="examOpt text-left p-4 rounded-xl bg-slate-900 border border-slate-700 text-sm text-slate-200 hover:border-brand-500" data-ok="${o===c.answer}">${escapeHtml(o)}</button>`).join('')}</div><button id="exitExam" class="mt-5 text-xs text-slate-500">Exit exam</button></div>`;
+              overlay.querySelectorAll('.examOpt').forEach(b=>b.onclick=()=>{if(b.dataset.ok==='true')score++; i++; if(i<qs.length) render(); else finish();});
+              overlay.querySelector('#exitExam').onclick=()=>overlay.remove();
+            }
+            function finish(){
+              const pct=Math.round(score/qs.length*100); userState.quizHistory.push({date:new Date().toISOString(),score:pct,correct:score,total:qs.length,type:'Exam Mode'}); userState.dailyChallenge.done=Math.min(2,(userState.dailyChallenge.done||0)+1); savePro(); overlay.innerHTML=`<div class="w-full max-w-md glass-panel p-8 rounded-3xl text-center"><div class="text-4xl font-black text-brand-400">${pct}%</div><p class="text-sm text-white mt-2">${score}/${qs.length} correct</p><button id="closeExam" class="mt-6 px-4 py-2 rounded-xl bg-brand-600 text-white text-xs font-bold">Back to StudyCraft</button></div>`; overlay.querySelector('#closeExam').onclick=()=>overlay.remove(); renderAdvancedDashboard(); }
+            document.body.appendChild(overlay); render();
+        }
+        function startWrittenPractice(){
+            const cards=(userState.cards||[]).filter(c=>c.question&&c.answer); if(!cards.length){toast('Add study material first.','error');return;}
+            const c=cards[Math.floor(Math.random()*cards.length)]; const answer=prompt(c.question+'\n\nType your answer:'); if(answer===null)return;
+            const expected=(c.answer||'').toLowerCase(), spoken=answer.toLowerCase(); const keywords=expected.split(/[^a-z0-9]+/).filter(w=>w.length>4).slice(0,12); const hits=keywords.filter(k=>spoken.includes(k)).length; const coverage=keywords.length?Math.round(hits/keywords.length*100):0;
+            alert(`Local feedback\n\nKey concept coverage: ${coverage}%\n\nExpected answer:\n${c.answer}\n\nThis is a keyword-based check, not AI marking.`);
+        }
+        function startMission(){
+            const due=getDueCards(); if(due.length){currentCardIndex=(userState.cards||[]).indexOf(due[0]);isFlipped=false;document.querySelector('[data-tab="tab-flashcards"]')?.click();updateCardDisplay();userState.dailyChallenge.done=Math.min(2,(userState.dailyChallenge.done||0)+1);savePro();}
+            else {document.querySelector('[data-tab="tab-quiz"]')?.click();toast("No due cards — complete a quiz for today's second task.");}
+        }
+        function aiTutorLocal(){
+            const c=userState.cards?.[currentCardIndex]; if(!c){toast('Open a flashcard first.');return;}
+            const words=(c.answer||'').split(/\s+/).filter(w=>w.length>4).slice(0,8);
+            alert(`StudyCraft Tutor (local mode)\n\nTopic: ${c.question}\n\nKey ideas to remember:\n• ${words.join('\n• ')}\n\nTry explaining the answer in your own words, then use the spoken-answer tool or written practice.\n\nNote: this is a local tutor, not a connected AI model.`);
+        }
+        function editCard(id){
+            const c=userState.cards.find(x=>x.id===id); if(!c)return;
+            const q=prompt('Edit question:',c.question); if(q===null)return; const a=prompt('Edit answer:',c.answer); if(a===null)return; c.question=q.trim()||c.question;c.answer=a.trim()||c.answer;savePro();updateCardDisplay();toast('Card updated.','success');
+        }
+        function deleteCard(id){
+            if(!confirm('Delete this flashcard?'))return; userState.cards=userState.cards.filter(c=>c.id!==id); currentCardIndex=Math.min(currentCardIndex,Math.max(0,userState.cards.length-1));savePro();updateCardDisplay();toast('Card deleted.');
+        }
+        function exportAllStudyData(){
+            const blob=new Blob([JSON.stringify(userState,null,2)],{type:'application/json'}); const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`studycraft_full_backup_${new Date().toISOString().slice(0,10)}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+        }
+        function initProSuite(){
+            ensureProState(); makeMaterialsTools(); renderProSuite(); renderSavedNotes();
+            document.getElementById('startExamBtn')?.addEventListener('click',startExamMode);
+            document.getElementById('mistakeBtn')?.addEventListener('click',showMistakeBank);
+            document.getElementById('plannerBtn')?.addEventListener('click',showPlanner);
+            document.getElementById('addSubjectBtn')?.addEventListener('click',addSubject);
+            document.getElementById('writtenPracticeBtn')?.addEventListener('click',startWrittenPractice);
+            document.getElementById('missionBtn')?.addEventListener('click',startMission);
+            // AI-ready local tutor shortcut: T
+            document.addEventListener('keydown',e=>{if(e.key.toLowerCase()==='t' && !['INPUT','TEXTAREA'].includes(document.activeElement?.tagName)) aiTutorLocal();});
+            window.editCard=editCard; window.deleteCard=deleteCard; window.exportAllStudyData=exportAllStudyData;
+        }
+
         function enhanceStudyCraft() {
             ensureUserStateShape();
             // Normalize streak state for profiles opened after a long gap.
@@ -1781,6 +1987,7 @@
             });
             buildMindMap();
             initAdvancedFeatures();
+            initProSuite();
             toast('StudyCraft is ready. Search with /, and review due cards for spaced repetition.');
         }
 
