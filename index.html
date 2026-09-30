@@ -1,502 +1,1161 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>StudyCraft AI — Enterprise Learning Ecosystem</title>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Open+Dyslexic&display=swap" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <title>StudyCraft AI Pro - Ultimate Learning Workspace</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                            800: '#3730a3',
+                            900: '#312e81',
+                        },
+                        accent: {
+                            cyan: '#06b6d4',
+                            emerald: '#10b981',
+                            rose: '#f43f5e',
+                            amber: '#f59e0b',
+                            purple: '#a855f7'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Plus Jakarta Sans', 'Inter', 'sans-serif'],
+                        dyslexic: ['OpenDyslexic', 'Arial', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Fonts & Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- PDF.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
     <style>
-        :root {
-            --bg-dark: #0f172a;
-            --card-bg: #1e293b;
-            --accent-blue: #3b82f6;
-            --accent-purple: #8b5cf6;
-            --accent-cyan: #06b6d4;
-            --accent-green: #10b981;
-            --accent-pink: #ec4899;
-            --accent-red: #ef4444;
-            --text-main: #f8fafc;
-            --text-muted: #94a3b8;
-            --border: #334155;
-            --font-main: 'Plus Jakarta Sans', sans-serif;
+        /* Custom Styles & Scrollbars */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.6); }
+        ::-webkit-scrollbar-thumb { background: rgba(99, 102, 241, 0.4); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(99, 102, 241, 0.8); }
+
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
         }
-
-        body.dyslexic { --font-main: 'Open Dyslexic', sans-serif; }
-
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: var(--font-main); }
-        body { background: var(--bg-dark); color: var(--text-main); min-height: 100vh; padding: 20px; }
-
-        .app-container { max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
-
-        header {
-            background: var(--card-bg);
-            padding: 16px 24px;
-            border-radius: 12px;
-            border: 1px solid var(--border);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+        .glass-card {
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
         }
-
-        .user-stats { display: flex; gap: 12px; align-items: center; }
-        .badge { background: #0f172a; border: 1px solid var(--border); padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 700; }
-        .badge-cyan { color: var(--accent-cyan); border-color: var(--accent-cyan); }
-        .badge-purple { color: var(--accent-purple); border-color: var(--accent-purple); }
-
-        nav { display: flex; gap: 8px; border-bottom: 1px solid var(--border); padding-bottom: 10px; flex-wrap: wrap; }
-        .tab-btn { background: transparent; color: var(--text-muted); border: none; padding: 10px 14px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 0.9rem; }
-        .tab-btn.active { background: var(--accent-blue); color: white; }
-
-        .panel { display: none; background: var(--card-bg); border-radius: 12px; border: 1px solid var(--border); padding: 24px; }
-        .panel.active { display: block; }
-
-        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-        @media(max-width: 768px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
-
-        label { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); display: block; margin: 10px 0 4px; }
-        input, select, textarea { width: 100%; background: #0f172a; border: 1px solid var(--border); color: white; padding: 10px; border-radius: 8px; }
-        button.btn { background: var(--accent-blue); color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 700; cursor: pointer; margin-top: 10px; }
-        button.btn:hover { opacity: 0.9; }
-        .btn-pink { background: var(--accent-pink); }
-        .btn-green { background: var(--accent-green); color: black; }
-        .btn-danger { background: var(--accent-red); }
-
-        .flashcard {
-            background: #0f172a; border: 2px solid var(--accent-purple); border-radius: 12px;
-            height: 200px; display: flex; align-items: center; justify-content: center;
-            text-align: center; padding: 20px; cursor: pointer; font-size: 1.2rem; font-weight: 600;
+        .glow-effect {
+            box-shadow: 0 0 25px -5px rgba(99, 102, 241, 0.3);
         }
-
-        .quiz-option {
-            background: #0f172a; border: 1px solid var(--border); padding: 12px 16px;
-            border-radius: 8px; margin-top: 10px; cursor: pointer; font-weight: 600; transition: all 0.2s ease;
+        .cloze-blank {
+            background: rgba(99, 102, 241, 0.25);
+            border-bottom: 2px dashed #6366f1;
+            padding: 2px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            color: transparent;
+            text-shadow: 0 0 8px rgba(255, 255, 255, 0.5);
+            user-select: none;
         }
-        .quiz-option:hover { border-color: var(--accent-blue); }
-        .quiz-option.correct { background: var(--accent-green); color: black; border-color: var(--accent-green); }
-        .quiz-option.wrong { background: var(--accent-red); color: white; border-color: var(--accent-red); }
-
-        .file-drop-zone {
-            border: 2px dashed var(--accent-blue); padding: 20px; border-radius: 8px;
-            text-align: center; background: #0f172a; margin-top: 8px; cursor: pointer;
+        .cloze-blank.revealed {
+            background: rgba(16, 185, 129, 0.2);
+            border-bottom: 2px solid #10b981;
+            color: #10b981;
+            text-shadow: none;
         }
-
-        .item-list-card {
-            background: #0f172a; border: 1px solid var(--border); padding: 12px;
-            border-radius: 8px; margin-top: 8px; display: flex; justify-content: space-between; align-items: center;
+        /* OpenDyslexic Font Simulation */
+        .font-dyslexic {
+            font-family: 'Comic Sans MS', 'Comic Neue', sans-serif !important;
+            letter-spacing: 0.05em;
+            word-spacing: 0.1em;
+            line-height: 1.8;
         }
     </style>
 </head>
-<body>
+<body class="bg-slate-950 text-slate-100 font-sans min-h-screen flex flex-col transition-colors duration-300">
 
-<div class="app-container">
-    <header>
-        <div>
-            <h2 style="color: var(--accent-cyan);">⚡ StudyCraft AI Pro</h2>
-            <p id="user-profile-summary" style="font-size: 0.8rem; color: var(--text-muted);">Account: Default Student | 0 Goals | 0 Decks Saved</p>
-        </div>
-        <div class="user-stats">
-            <span class="badge badge-cyan" id="xp-display">⚡ 0 XP</span>
-            <span class="badge badge-purple" id="level-display">🏆 Level 1</span>
-            <button class="btn" style="padding: 4px 8px; font-size: 0.75rem;" onclick="toggleDyslexia()">Aa Font</button>
+    <header class="sticky top-0 z-40 glass-panel border-b border-slate-800 px-4 py-3">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <!-- Brand Logo -->
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-accent-cyan flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-brand-500/30">
+                    <i class="fa-solid fa-brain"></i>
+                </div>
+                <div>
+                    <h1 class="font-extrabold text-lg tracking-tight bg-gradient-to-r from-white via-slate-200 to-brand-500 bg-clip-text text-transparent">StudyCraft <span class="text-xs px-2 py-0.5 rounded-full bg-brand-500/20 text-brand-500 border border-brand-500/30">PRO</span></h1>
+                    <p class="text-xs text-slate-400">AI Intelligent Workspace</p>
+                </div>
+            </div>
+
+            <!-- Header Middle Stats Bar -->
+            <div class="hidden md:flex items-center gap-6 glass-card px-4 py-1.5 rounded-full text-xs">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-fire text-amber-500"></i>
+                    <span class="text-slate-400">Streak:</span>
+                    <span id="headerStreak" class="font-bold text-white">0 Days</span>
+                </div>
+                <div class="h-3 w-px bg-slate-700"></div>
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-bolt text-brand-500"></i>
+                    <span class="text-slate-400">XP:</span>
+                    <span id="headerXP" class="font-bold text-white">0 XP</span>
+                </div>
+                <div class="h-3 w-px bg-slate-700"></div>
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-graduation-cap text-accent-emerald"></i>
+                    <span id="headerLevel" class="font-bold text-slate-300">Novice</span>
+                </div>
+            </div>
+
+            <!-- Right Controls: Account Switcher & Accessibility -->
+            <div class="flex items-center gap-3">
+                <!-- Dyslexic Toggle -->
+                <button id="dyslexicBtn" title="Toggle Dyslexia Friendly Font" class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition">
+                    <i class="fa-solid fa-font"></i>
+                </button>
+                <!-- Dark/Light Theme -->
+                <button id="themeToggleBtn" title="Toggle Light/Dark Theme" class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition">
+                    <i class="fa-solid fa-moon"></i>
+                </button>
+
+                <!-- ACCOUNT SYSTEM DROPDOWN -->
+                <div class="relative">
+                    <button id="accountMenuBtn" class="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl px-3 py-1.5 transition">
+                        <img id="activeAvatar" src="https://api.dicebear.com/7.x/bottts/svg?seed=Alex" class="w-7 h-7 rounded-full bg-slate-700" alt="Avatar">
+                        <div class="text-left hidden sm:block">
+                            <p id="activeUsername" class="text-xs font-semibold text-slate-200">Alex</p>
+                            <p id="activeUserTitle" class="text-[10px] text-slate-400">Pro Student</p>
+                        </div>
+                        <i class="fa-solid fa-chevron-down text-xs text-slate-400 ml-1"></i>
+                    </button>
+
+                    <!-- Account Dropdown Panel -->
+                    <div id="accountDropdown" class="hidden absolute right-0 mt-2 w-72 glass-panel rounded-2xl shadow-2xl p-3 z-50 border border-slate-700">
+                        <div class="text-xs font-semibold text-slate-400 px-2 py-1 mb-2 border-b border-slate-800 flex justify-between items-center">
+                            <span>SWITCH USER PROFILE</span>
+                            <span class="text-[10px] bg-brand-500/20 text-brand-500 px-1.5 py-0.5 rounded">Multi-User</span>
+                        </div>
+                        
+                        <div id="userProfilesList" class="space-y-1 max-h-48 overflow-y-auto pr-1">
+                            <!-- Populated dynamically -->
+                        </div>
+
+                        <div class="mt-3 pt-2 border-t border-slate-800 flex flex-col gap-1.5">
+                            <button id="openNewAccountModal" class="w-full text-left text-xs text-brand-500 hover:bg-brand-500/10 p-2 rounded-lg flex items-center gap-2 font-medium">
+                                <i class="fa-solid fa-plus-circle"></i> Create New Account Profile
+                            </button>
+                            <button id="exportAccountBtn" class="w-full text-left text-xs text-slate-300 hover:bg-slate-800 p-2 rounded-lg flex items-center gap-2">
+                                <i class="fa-solid fa-download text-accent-cyan"></i> Backup / Export Account JSON
+                            </button>
+                            <label class="w-full text-left text-xs text-slate-300 hover:bg-slate-800 p-2 rounded-lg flex items-center gap-2 cursor-pointer">
+                                <i class="fa-solid fa-upload text-accent-emerald"></i> Restore / Import Account
+                                <input type="file" id="importAccountInput" accept=".json" class="hidden">
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </header>
 
-    <nav>
-        <button class="tab-btn active" onclick="showTab('tab-goals')">Account & Goals</button>
-        <button class="tab-btn" onclick="showTab('tab-content')">Multi-File Importer</button>
-        <button class="tab-btn" onclick="showTab('tab-tools')">Flashcards & Decks</button>
-        <button class="tab-btn" onclick="showTab('tab-quiz')">JSON & Auto Quiz Engine</button>
-    </nav>
-
-    <!-- TAB 1: ACCOUNT & MULTI-GOAL MANAGER -->
-    <section id="tab-goals" class="panel active">
-        <h3>1. Multi-Goal Account Manager</h3>
-        <div class="grid-2">
-            <div>
-                <h4>Add New Study Goal</h4>
-                <label>Subject / Course</label>
-                <input type="text" id="goal-subject" placeholder="e.g. Organic Chemistry">
-                
-                <label>Target Grade / Score (%)</label>
-                <input type="number" id="goal-score" placeholder="90">
-
-                <label>Target Date</label>
-                <input type="date" id="goal-date">
-
-                <button class="btn" onclick="addGoal()">Save Goal to Account</button>
-            </div>
-            <div>
-                <h4>Saved Account Goals</h4>
-                <div id="goals-list-container" style="max-height: 250px; overflow-y: auto; margin-top: 10px;">
-                    <p style="color: var(--text-muted); font-size: 0.85rem;">No goals added yet.</p>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- TAB 2: MULTI-FILE IMPORTER -->
-    <section id="tab-content" class="panel">
-        <h3>2. Multi-File Document & Slide Parser</h3>
-        <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 12px;">Upload multiple PDFs, PPT notes, or TXT files at once to convert them into study decks.</p>
-
-        <div class="file-drop-zone" onclick="document.getElementById('multi-file-input').click()">
-            <p style="font-weight: 700;">📁 Click to select multiple files (PDF, PPT, TXT)</p>
-            <input type="file" id="multi-file-input" multiple accept=".pdf,.txt,.ppt,.pptx" style="display: none;" onchange="handleMultipleFiles(event)">
-        </div>
-
-        <label style="margin-top: 16px;">Or Paste Mass Text Content</label>
-        <textarea id="raw-notes" rows="4" placeholder="Mitochondria produces ATP. Chloroplast carries out photosynthesis. Nucleus stores genomic DNA."></textarea>
-
-        <label>Deck Title for Account Storage</label>
-        <input type="text" id="deck-title-input" placeholder="e.g. Bio Chapter 1 Notes">
+    <div class="flex-1 flex max-w-7xl w-full mx-auto p-4 gap-6 overflow-hidden">
         
-        <button class="btn btn-green" onclick="generateAndSaveDeck()">Parse & Save Deck to Account</button>
-    </section>
+        <!-- Sidebar Nav -->
+        <aside class="w-64 glass-panel rounded-2xl p-4 flex flex-col gap-2 shrink-0 hidden lg:flex">
+            <div class="px-3 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider">Workspace</div>
+            
+            <button data-tab="tab-dashboard" class="tab-btn flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-sm transition text-slate-300 hover:bg-slate-800 active-tab">
+                <i class="fa-solid fa-gauge-high w-5 text-brand-500"></i> Dashboard & Goals
+            </button>
+            <button data-tab="tab-content" class="tab-btn flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-sm transition text-slate-400 hover:bg-slate-800">
+                <i class="fa-solid fa-file-arrow-up w-5 text-accent-cyan"></i> Material Studio
+            </button>
+            <button data-tab="tab-flashcards" class="tab-btn flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-sm transition text-slate-400 hover:bg-slate-800">
+                <i class="fa-solid fa-layer-group w-5 text-accent-amber"></i> Flashcards (Leitner)
+            </button>
+            <button data-tab="tab-quiz" class="tab-btn flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-sm transition text-slate-400 hover:bg-slate-800">
+                <i class="fa-solid fa-circle-question w-5 text-accent-rose"></i> SMART Quiz Engine
+            </button>
+            <button data-tab="tab-cloze" class="tab-btn flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-sm transition text-slate-400 hover:bg-slate-800">
+                <i class="fa-solid fa-highlighter w-5 text-accent-emerald"></i> Cloze Active Recall
+            </button>
+            <button data-tab="tab-mindmap" class="tab-btn flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-sm transition text-slate-400 hover:bg-slate-800">
+                <i class="fa-solid fa-diagram-project w-5 text-accent-purple"></i> Mind Map Studio
+            </button>
 
-    <!-- TAB 3: FLASHCARDS & SAVED DECKS -->
-    <section id="tab-tools" class="panel">
-        <h3>3. Flashcards & Saved Decks</h3>
-        <div class="grid-2">
-            <div>
-                <h4>🎴 Active Deck Study Session</h4>
-                <div class="flashcard" id="card-display" onclick="flipCard()" style="margin-top: 10px;">
-                    Select or create a deck to start reviewing!
+            <div class="px-3 py-2 mt-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Utilities</div>
+            <button data-tab="tab-voice" class="tab-btn flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-sm transition text-slate-400 hover:bg-slate-800">
+                <i class="fa-solid fa-microphone-lines w-5 text-cyan-400"></i> Voice Tutor
+            </button>
+            <button data-tab="tab-focus" class="tab-btn flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-sm transition text-slate-400 hover:bg-slate-800">
+                <i class="fa-solid fa-clock-rotate-left w-5 text-amber-400"></i> Focus & Audio Synth
+            </button>
+            <button data-tab="tab-community" class="tab-btn flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-sm transition text-slate-400 hover:bg-slate-800">
+                <i class="fa-solid fa-users-rays w-5 text-indigo-400"></i> Community Decks
+            </button>
+
+            <!-- Bottom Mini Profile Box -->
+            <div class="mt-auto pt-4 border-t border-slate-800/80 flex items-center gap-3">
+                <img id="sidebarAvatar" src="https://api.dicebear.com/7.x/bottts/svg?seed=Alex" class="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700">
+                <div class="truncate">
+                    <p id="sidebarUsername" class="text-xs font-bold text-white truncate">Alex</p>
+                    <p id="sidebarXPText" class="text-[11px] text-slate-400">0 XP Earned</p>
                 </div>
-                <div style="display: flex; gap: 10px; margin-top: 10px;">
-                    <button class="btn" style="background: var(--accent-red); flex: 1;" onclick="rateCard(1)">Hard</button>
-                    <button class="btn btn-green" style="flex: 1;" onclick="rateCard(3)">Easy (+15 XP)</button>
+            </div>
+        </aside>
+
+        <main class="flex-1 flex flex-col gap-6 overflow-y-auto pr-1">
+
+            <!-- Mobile Quick Navigation Bar -->
+            <div class="lg:hidden flex overflow-x-auto gap-2 pb-2 border-b border-slate-800 no-scrollbar">
+                <button data-tab="tab-dashboard" class="tab-btn px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap bg-brand-600 text-white">Dashboard</button>
+                <button data-tab="tab-content" class="tab-btn px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap bg-slate-800 text-slate-300">Materials</button>
+                <button data-tab="tab-flashcards" class="tab-btn px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap bg-slate-800 text-slate-300">Flashcards</button>
+                <button data-tab="tab-quiz" class="tab-btn px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap bg-slate-800 text-slate-300">Quizzes</button>
+                <button data-tab="tab-cloze" class="tab-btn px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap bg-slate-800 text-slate-300">Cloze</button>
+                <button data-tab="tab-mindmap" class="tab-btn px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap bg-slate-800 text-slate-300">Mind Map</button>
+                <button data-tab="tab-focus" class="tab-btn px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap bg-slate-800 text-slate-300">Focus Timer</button>
+            </div>
+
+            <!-- TAB 1: DASHBOARD & GOALS -->
+            <div id="tab-dashboard" class="tab-content flex flex-col gap-6">
+                <!-- Welcome Banner -->
+                <div class="glass-panel p-6 rounded-3xl relative overflow-hidden bg-gradient-to-r from-brand-900/40 via-slate-900 to-slate-900 border border-brand-500/20">
+                    <div class="max-w-xl z-10 relative">
+                        <span class="text-xs font-bold text-brand-500 uppercase tracking-widest px-2.5 py-1 rounded-full bg-brand-500/10 border border-brand-500/20">Active Workspace</span>
+                        <h2 class="text-2xl sm:text-3xl font-extrabold text-white mt-2">Welcome Back, <span id="dashAccountName">Alex</span>! 👋</h2>
+                        <p class="text-sm text-slate-400 mt-1">Ready to boost your knowledge today? Track your active goals, review daily flashcards, and hit your target score.</p>
+                        
+                        <div class="flex flex-wrap gap-3 mt-4">
+                            <button data-tab="tab-flashcards" class="tab-btn px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold shadow-lg transition">Start Today's Review</button>
+                            <button data-tab="tab-content" class="tab-btn px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 transition">Upload New Material</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Account Goals Tracker Grid -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Goals Panel -->
+                    <div class="glass-panel p-5 rounded-2xl flex flex-col">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="flex items-center gap-2">
+                                <i class="fa-solid fa-bullseye text-accent-rose"></i>
+                                <h3 class="font-bold text-sm text-white">Target Exam Goals</h3>
+                            </div>
+                            <button id="addGoalBtn" class="text-xs bg-slate-800 hover:bg-slate-700 text-brand-500 border border-slate-700 px-2.5 py-1 rounded-lg transition">+ New Goal</button>
+                        </div>
+                        <div id="accountGoalsList" class="space-y-3 flex-1">
+                            <!-- Dynamic Goals List -->
+                        </div>
+                    </div>
+
+                    <!-- Analytics Summary & Heatmap -->
+                    <div class="glass-panel p-5 rounded-2xl flex flex-col">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="flex items-center gap-2">
+                                <i class="fa-solid fa-chart-line text-accent-emerald"></i>
+                                <h3 class="font-bold text-sm text-white">Learning Velocity & Activity Heatmap</h3>
+                            </div>
+                            <span class="text-xs text-slate-400">Last 28 Days</span>
+                        </div>
+                        <!-- Mini Heatmap Grid -->
+                        <div id="activityHeatmap" class="grid grid-cols-7 gap-1.5 p-3 glass-card rounded-xl mb-4">
+                            <!-- Populated with JS -->
+                        </div>
+                        <div class="grid grid-cols-2 gap-3 mt-auto">
+                            <div class="glass-card p-3 rounded-xl border border-slate-800">
+                                <p class="text-[11px] text-slate-400">Mastery Index</p>
+                                <p id="masteryPercent" class="text-xl font-extrabold text-accent-emerald">0%</p>
+                            </div>
+                            <div class="glass-card p-3 rounded-xl border border-slate-800">
+                                <p class="text-[11px] text-slate-400">Weak Topics Detected</p>
+                                <p id="weakSpotCount" class="text-xl font-extrabold text-accent-rose">None</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <div>
-                <h4>📚 Account Deck Library</h4>
-                <div id="decks-library-container" style="max-height: 250px; overflow-y: auto;">
-                    <p style="color: var(--text-muted); font-size: 0.85rem;">No saved decks found.</p>
+            <!-- TAB 2: MATERIAL & CONTENT STUDIO -->
+            <div id="tab-content" class="tab-content hidden flex-col gap-6">
+                <div class="glass-panel p-6 rounded-2xl">
+                    <h2 class="text-xl font-bold text-white mb-1"><i class="fa-solid fa-file-arrow-up text-accent-cyan mr-2"></i> Material Studio</h2>
+                    <p class="text-xs text-slate-400 mb-4">Upload PDFs, PPTXs, TXT files or paste raw study notes. AI will extract concepts into flashcards, quizzes, and mind maps.</p>
+
+                    <!-- File Dropzone -->
+                    <div id="dropzone" class="border-2 border-dashed border-slate-700 hover:border-brand-500 rounded-2xl p-8 text-center bg-slate-900/50 hover:bg-slate-900 transition cursor-pointer">
+                        <i class="fa-solid fa-cloud-arrow-up text-3xl text-brand-500 mb-2"></i>
+                        <p class="text-sm font-semibold text-slate-200">Drag & Drop Study Documents or <span class="text-brand-500">Browse</span></p>
+                        <p class="text-xs text-slate-500 mt-1">Supports PDF, PPTX, TXT formats</p>
+                        <input type="file" id="fileInput" accept=".pdf,.txt,.pptx" class="hidden" multiple>
+                    </div>
+
+                    <div class="mt-4 flex items-center gap-3">
+                        <div class="h-px bg-slate-800 flex-1"></div>
+                        <span class="text-xs text-slate-500 font-semibold uppercase">Or Paste Text Notes</span>
+                        <div class="h-px bg-slate-800 flex-1"></div>
+                    </div>
+
+                    <!-- Manual Text Area -->
+                    <div class="mt-4">
+                        <textarea id="rawNotesInput" rows="6" placeholder="Paste your biology, history, or engineering notes here..." class="w-full glass-card rounded-xl p-3 text-xs text-slate-200 border border-slate-700 focus:border-brand-500 outline-none"></textarea>
+                    </div>
+
+                    <!-- Process Buttons -->
+                    <div class="mt-4 flex flex-wrap gap-3">
+                        <button id="processTextBtn" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-brand-600 to-accent-cyan hover:opacity-90 text-white text-xs font-bold transition flex items-center gap-2">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i> Process & Auto-Generate Learning Assets
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Processed Material Summary -->
+                <div class="glass-panel p-5 rounded-2xl">
+                    <h3 class="font-bold text-sm text-white mb-2">Extracted Key Terms & Concepts</h3>
+                    <div id="extractedTermsContainer" class="flex flex-wrap gap-2 text-xs text-slate-400">
+                        <span class="italic text-slate-600">No content processed yet. Upload notes above.</span>
+                    </div>
                 </div>
             </div>
+
+            <!-- TAB 3: SPAGED REPETITION FLASHCARDS -->
+            <div id="tab-flashcards" class="tab-content hidden flex-col gap-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-xl font-bold text-white"><i class="fa-solid fa-layer-group text-accent-amber mr-2"></i> Spaced Repetition Decks</h2>
+                        <p class="text-xs text-slate-400">Leitner 5-Box Spaced Repetition System for maximum memory retention.</p>
+                    </div>
+                    <button id="addCardManualBtn" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700">+ Add Custom Card</button>
+                </div>
+
+                <!-- Flashcard Active Deck View -->
+                <div class="max-w-xl mx-auto w-full flex flex-col items-center">
+                    <div id="flashcardBox" class="w-full min-h-[260px] glass-panel rounded-3xl p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-transform duration-500 hover:scale-[1.01] relative border border-brand-500/30">
+                        <span id="cardBoxTag" class="absolute top-4 left-4 text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-slate-800 text-brand-400 border border-slate-700">Box 1</span>
+                        <div id="cardContent" class="text-lg font-semibold text-white my-auto">
+                            Click "Process Notes" or Add Cards to Begin Learning!
+                        </div>
+                        <p class="text-[11px] text-slate-500 mt-4"><i class="fa-solid fa-rotate mr-1"></i> Click card to flip</p>
+                    </div>
+
+                    <!-- Leitner Answer Ratings (1-4) -->
+                    <div id="ratingControls" class="grid grid-cols-4 gap-2 w-full mt-6">
+                        <button data-rate="1" class="rate-btn p-3 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 text-xs font-bold transition flex flex-col items-center">
+                            <span>Again</span>
+                            <span class="text-[10px] opacity-70">Box 1</span>
+                        </button>
+                        <button data-rate="2" class="rate-btn p-3 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-400 text-xs font-bold transition flex flex-col items-center">
+                            <span>Hard</span>
+                            <span class="text-[10px] opacity-70">Same Box</span>
+                        </button>
+                        <button data-rate="3" class="rate-btn p-3 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs font-bold transition flex flex-col items-center">
+                            <span>Good</span>
+                            <span class="text-[10px] opacity-70">+1 Box</span>
+                        </button>
+                        <button data-rate="4" class="rate-btn p-3 rounded-xl bg-brand-500/10 hover:bg-brand-500/20 border border-brand-500/30 text-brand-400 text-xs font-bold transition flex flex-col items-center">
+                            <span>Easy</span>
+                            <span class="text-[10px] opacity-70">+2 Boxes</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 4: ADVANCED QUIZ ENGINE -->
+            <div id="tab-quiz" class="tab-content hidden flex-col gap-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-xl font-bold text-white"><i class="fa-solid fa-circle-question text-accent-rose mr-2"></i> SMART Quiz Engine</h2>
+                        <p class="text-xs text-slate-400">Contextual distractors generated from real material concepts, not generic placeholders.</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <button id="importQuizJsonBtn" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700">Import Quiz JSON</button>
+                        <button id="generateQuizFromCards" class="px-3 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white shadow-md">Convert Cards to Quiz</button>
+                    </div>
+                </div>
+
+                <div id="quizContainer" class="glass-panel p-6 rounded-2xl flex flex-col gap-6">
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                        <span id="quizProgress" class="text-xs font-bold text-slate-400">Question 1 of 5</span>
+                        <span id="quizScore" class="text-xs font-bold text-brand-400">Score: 0 XP</span>
+                    </div>
+
+                    <h3 id="quizQuestionText" class="text-base sm:text-lg font-bold text-white">Please load material or cards to generate a SMART quiz.</h3>
+
+                    <div id="quizOptionsGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <!-- Smart options populated dynamically -->
+                    </div>
+
+                    <div id="quizExplanation" class="hidden p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300"></div>
+
+                    <button id="nextQuizBtn" class="hidden self-end px-5 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold transition">Next Question <i class="fa-solid fa-arrow-right ml-1"></i></button>
+                </div>
+            </div>
+
+            <!-- TAB 5: CLOZE DELETION EDITOR -->
+            <div id="tab-cloze" class="tab-content hidden flex-col gap-6">
+                <div class="glass-panel p-6 rounded-2xl">
+                    <h2 class="text-xl font-bold text-white mb-1"><i class="fa-solid fa-highlighter text-accent-emerald mr-2"></i> Cloze Active Recall Editor</h2>
+                    <p class="text-xs text-slate-400 mb-4">Select key text or bracket terms with `[term]` to hide them into interactive fill-in-the-blank practice.</p>
+
+                    <textarea id="clozeInput" rows="5" class="w-full glass-card p-3 rounded-xl text-xs text-slate-200 border border-slate-700 outline-none" placeholder="Paste notes here. Example: Mitochondria is the [powerhouse] of the cell."></textarea>
+                    
+                    <div class="mt-3 flex gap-3">
+                        <button id="renderClozeBtn" class="px-4 py-2 rounded-xl bg-accent-emerald hover:opacity-90 text-slate-950 font-bold text-xs">Generate Cloze Worksheet</button>
+                    </div>
+                </div>
+
+                <div class="glass-panel p-6 rounded-2xl">
+                    <h3 class="text-sm font-bold text-white mb-3">Interactive Worksheet</h3>
+                    <div id="clozeDisplay" class="text-sm leading-relaxed text-slate-300 p-4 rounded-xl bg-slate-900/60 border border-slate-800">
+                        Worksheet will display here...
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 6: CONCEPT MIND MAP -->
+            <div id="tab-mindmap" class="tab-content hidden flex-col gap-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-xl font-bold text-white"><i class="fa-solid fa-diagram-project text-accent-purple mr-2"></i> Concept Mind Map</h2>
+                        <p class="text-xs text-slate-400">Interactive hierarchy visualizer constructed from extracted core concepts.</p>
+                    </div>
+                    <button id="rebuildMindMapBtn" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700"><i class="fa-solid fa-arrows-rotate mr-1"></i> Auto Layout</button>
+                </div>
+
+                <div class="glass-panel rounded-2xl p-2 h-[450px] relative overflow-hidden bg-slate-950">
+                    <svg id="mindmapSVG" class="w-full h-full cursor-grab active:cursor-grabbing">
+                        <g id="mindmapGroup"></g>
+                    </svg>
+                </div>
+            </div>
+
+            <!-- TAB 7: VOICE TUTOR -->
+            <div id="tab-voice" class="tab-content hidden flex-col gap-6">
+                <div class="glass-panel p-6 rounded-2xl flex flex-col items-center text-center">
+                    <div class="w-16 h-16 rounded-full bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 text-2xl mb-3">
+                        <i class="fa-solid fa-microphone-lines"></i>
+                    </div>
+                    <h2 class="text-xl font-bold text-white">AI Voice Tutor & Speech Evaluator</h2>
+                    <p class="text-xs text-slate-400 max-w-md mt-1">Read aloud active flashcards or answer questions verbally using your browser's speech recognition.</p>
+
+                    <div id="voiceCardText" class="my-6 text-base font-semibold text-slate-200 glass-card p-4 rounded-2xl w-full max-w-lg border border-slate-800">
+                        "Click 'Read Aloud' to listen to active card prompts or speak your answer."
+                    </div>
+
+                    <div class="flex flex-wrap gap-3">
+                        <button id="ttsReadBtn" class="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs border border-slate-700 flex items-center gap-2">
+                            <i class="fa-solid fa-volume-high text-cyan-400"></i> Read Aloud (TTS)
+                        </button>
+                        <button id="sttRecordBtn" class="px-5 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold text-xs flex items-center gap-2 shadow-lg">
+                            <i class="fa-solid fa-microphone"></i> Answer Verbally
+                        </button>
+                    </div>
+                    <p id="sttStatus" class="text-[11px] text-slate-500 mt-3">Mic Status: Idle</p>
+                </div>
+            </div>
+
+            <!-- TAB 8: FOCUS TIMER & AUDIO SYNTH -->
+            <div id="tab-focus" class="tab-content hidden flex-col gap-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Pomodoro Timer -->
+                    <div class="glass-panel p-6 rounded-2xl flex flex-col items-center justify-center text-center">
+                        <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-2">Focus Pomodoro</h3>
+                        <div id="timerDisplay" class="text-5xl font-black text-white my-4 font-mono">25:00</div>
+                        <div class="flex gap-3">
+                            <button id="startTimerBtn" class="px-5 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs">Start</button>
+                            <button id="pauseTimerBtn" class="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs border border-slate-700">Pause</button>
+                            <button id="resetTimerBtn" class="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 font-bold text-xs border border-slate-700">Reset</button>
+                        </div>
+                    </div>
+
+                    <!-- Web Audio Synthesizer -->
+                    <div class="glass-panel p-6 rounded-2xl flex flex-col gap-4">
+                        <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                            <i class="fa-solid fa-sliders text-amber-400"></i> Ambient Focus Noise Synthesizer
+                        </h3>
+                        <p class="text-xs text-slate-400">Procedurally synthesized audio (No external files required).</p>
+
+                        <div class="space-y-3">
+                            <div class="flex items-center justify-between glass-card p-3 rounded-xl border border-slate-800">
+                                <span class="text-xs font-medium text-slate-300">White Noise Generator</span>
+                                <button id="toggleWhiteNoise" class="px-3 py-1 rounded-lg bg-slate-800 text-xs text-slate-400 hover:text-white">Play</button>
+                            </div>
+                            <div class="flex items-center justify-between glass-card p-3 rounded-xl border border-slate-800">
+                                <span class="text-xs font-medium text-slate-300">Binaural Focus Pulse (40Hz)</span>
+                                <button id="toggleBinaural" class="px-3 py-1 rounded-lg bg-slate-800 text-xs text-slate-400 hover:text-white">Play</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 9: COMMUNITY HUB -->
+            <div id="tab-community" class="tab-content hidden flex-col gap-6">
+                <div class="glass-panel p-6 rounded-2xl">
+                    <h2 class="text-xl font-bold text-white mb-1"><i class="fa-solid fa-users-rays text-indigo-400 mr-2"></i> Community Shared Decks</h2>
+                    <p class="text-xs text-slate-400 mb-4">Browse and import community curated deck templates directly into your active profile.</p>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                        <div class="glass-card p-4 rounded-xl border border-slate-800 flex flex-col justify-between">
+                            <div>
+                                <span class="text-[10px] font-bold text-accent-cyan bg-accent-cyan/10 px-2 py-0.5 rounded-full">Biology</span>
+                                <h4 class="font-bold text-sm text-white mt-2">Cellular Biology & Genetics</h4>
+                                <p class="text-xs text-slate-400 mt-1">15 Cards • Leitner Ready</p>
+                            </div>
+                            <button onclick="importPresetDeck('bio')" class="mt-4 w-full py-2 bg-brand-600/20 hover:bg-brand-600 text-brand-400 hover:text-white text-xs font-bold rounded-lg border border-brand-500/30 transition">Import Deck</button>
+                        </div>
+
+                        <div class="glass-card p-4 rounded-xl border border-slate-800 flex flex-col justify-between">
+                            <div>
+                                <span class="text-[10px] font-bold text-accent-amber bg-accent-amber/10 px-2 py-0.5 rounded-full">Computer Science</span>
+                                <h4 class="font-bold text-sm text-white mt-2">Data Structures & Algorithms</h4>
+                                <p class="text-xs text-slate-400 mt-1">20 Cards • Leitner Ready</p>
+                            </div>
+                            <button onclick="importPresetDeck('cs')" class="mt-4 w-full py-2 bg-brand-600/20 hover:bg-brand-600 text-brand-400 hover:text-white text-xs font-bold rounded-lg border border-brand-500/30 transition">Import Deck</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- CREATE NEW USER ACCOUNT MODAL -->
+    <div id="newAccountModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center hidden">
+        <div class="glass-panel p-6 rounded-3xl w-full max-w-md border border-slate-700 shadow-2xl">
+            <h3 class="text-lg font-bold text-white mb-1">Create New Account Profile</h3>
+            <p class="text-xs text-slate-400 mb-4">Each profile stores isolated flashcards, quiz scores, goals, and study streaks.</p>
+
+            <form id="createAccountForm" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1">Account Name</label>
+                    <input type="text" id="newUsername" required placeholder="e.g. Sarah, David" class="w-full glass-card p-2.5 rounded-xl text-xs text-white border border-slate-700 outline-none focus:border-brand-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1">Title / Role</label>
+                    <input type="text" id="newUserRole" placeholder="e.g. Pre-Med Student, High School Senior" class="w-full glass-card p-2.5 rounded-xl text-xs text-white border border-slate-700 outline-none focus:border-brand-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1">Avatar Seed Keyword</label>
+                    <input type="text" id="newAvatarSeed" placeholder="e.g. Felix, Mia, Alex" class="w-full glass-card p-2.5 rounded-xl text-xs text-white border border-slate-700 outline-none focus:border-brand-500">
+                </div>
+
+                <div class="flex justify-end gap-2 pt-2">
+                    <button type="button" id="closeAccountModalBtn" class="px-4 py-2 rounded-xl bg-slate-800 text-xs font-semibold text-slate-300">Cancel</button>
+                    <button type="submit" class="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-bold text-white">Create Profile</button>
+                </div>
+            </form>
         </div>
-    </section>
+    </div>
 
-    <!-- TAB 4: JSON & AUTO QUIZ ENGINE -->
-    <section id="tab-quiz" class="panel">
-        <h3>4. Automatic & JSON Quiz Engine</h3>
-        <div class="grid-2">
-            <div>
-                <h4>Import Custom Quiz via JSON Code</h4>
-                <label>Paste JSON Array Code</label>
-                <textarea id="json-quiz-input" rows="8" placeholder='[
-  {
-    "question": "What stores DNA in a eukaryotic cell?",
-    "options": ["Ribosome", "Nucleus", "Cytoplasm", "Cell Wall"],
-    "correct": 1
-  }
-]'></textarea>
-                <button class="btn btn-pink" onclick="importJsonQuiz()">Import JSON Quiz</button>
-                <button class="btn" onclick="generateAutoQuizFromActiveDeck()">Auto-Generate from Active Deck</button>
-            </div>
+    <!-- CREATE NEW GOAL MODAL -->
+    <div id="newGoalModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center hidden">
+        <div class="glass-panel p-6 rounded-3xl w-full max-w-md border border-slate-700 shadow-2xl">
+            <h3 class="text-lg font-bold text-white mb-1">Add Exam Target Goal</h3>
+            <p class="text-xs text-slate-400 mb-4">Set target subjects and exam deadlines for active profile.</p>
 
-            <div>
-                <h4>Interactive Quiz Module</h4>
-                <div style="background: #0f172a; padding: 20px; border-radius: 8px; border: 1px solid var(--border);">
-                    <h4 id="quiz-question">No active quiz question loaded.</h4>
-                    <div id="quiz-options"></div>
-                    <div id="quiz-feedback" style="margin-top: 14px; font-weight: 700; display: none;"></div>
-                    <button class="btn" id="next-quiz-btn" style="margin-top: 14px; display: none;" onclick="nextQuestion()">Next Question ➔</button>
+            <form id="createGoalForm" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1">Subject / Target Name</label>
+                    <input type="text" id="goalSubject" required placeholder="e.g. MCAT Biology, AP Physics" class="w-full glass-card p-2.5 rounded-xl text-xs text-white border border-slate-700 outline-none">
                 </div>
-            </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1">Target Score (%)</label>
+                    <input type="number" id="goalTargetScore" min="1" max="100" value="90" class="w-full glass-card p-2.5 rounded-xl text-xs text-white border border-slate-700 outline-none">
+                </div>
+
+                <div class="flex justify-end gap-2 pt-2">
+                    <button type="button" id="closeGoalModalBtn" class="px-4 py-2 rounded-xl bg-slate-800 text-xs font-semibold text-slate-300">Cancel</button>
+                    <button type="submit" class="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-bold text-white">Save Goal</button>
+                </div>
+            </form>
         </div>
-    </section>
-</div>
+    </div>
 
-<script>
-    // ACCOUNT STORAGE STATE
-    let accountData = {
-        xp: 0,
-        level: 1,
-        goals: [],
-        decks: [],
-        quizzes: []
-    };
-
-    let activeDeckIndex = -1;
-    let currentCardIndex = 0;
-    let showingFront = true;
-    let activeQuiz = [];
-    let currentQuizIndex = 0;
-
-    // INITIALIZATION
-    window.onload = function() {
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
-        loadAccountFromStorage();
-        renderGoals();
-        renderDecks();
-    };
-
-    function saveAccountToStorage() {
-        localStorage.setItem('studycraft_account_data', JSON.stringify(accountData));
-        updateHeaderStats();
-    }
-
-    function loadAccountFromStorage() {
-        const data = localStorage.getItem('studycraft_account_data');
-        if (data) {
-            accountData = JSON.parse(data);
-        }
-        updateHeaderStats();
-    }
-
-    function updateHeaderStats() {
-        accountData.level = Math.floor(accountData.xp / 100) + 1;
-        document.getElementById('xp-display').innerText = `⚡ ${accountData.xp} XP`;
-        document.getElementById('level-display').innerText = `🏆 Level ${accountData.level}`;
-        document.getElementById('user-profile-summary').innerText = `Account: Student | ${accountData.goals.length} Goals | ${accountData.decks.length} Decks Saved`;
-    }
-
-    function showTab(tabId) {
-        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        document.getElementById(tabId).classList.add('active');
-        event.target.classList.add('active');
-    }
-
-    // MULTI-GOAL ENGINE
-    function addGoal() {
-        const subject = document.getElementById('goal-subject').value;
-        const score = document.getElementById('goal-score').value;
-        const date = document.getElementById('goal-date').value;
-
-        if (!subject || !score) return alert("Please fill in subject and score!");
-
-        accountData.goals.push({ id: Date.now(), subject, score, date });
-        saveAccountToStorage();
-        renderGoals();
-
-        document.getElementById('goal-subject').value = '';
-        document.getElementById('goal-score').value = '';
-    }
-
-    function renderGoals() {
-        const container = document.getElementById('goals-list-container');
-        if (accountData.goals.length === 0) {
-            container.innerHTML = `<p style="color: var(--text-muted); font-size: 0.85rem;">No goals added yet.</p>`;
-            return;
-        }
-
-        container.innerHTML = accountData.goals.map((g, idx) => `
-            <div class="item-list-card">
-                <div>
-                    <b>${g.subject}</b> — Target: ${g.score}%
-                    <div style="font-size: 0.75rem; color: var(--text-muted);">Deadline: ${g.date || 'No Date'}</div>
-                </div>
-                <button class="btn btn-danger" style="padding: 4px 8px; font-size: 0.7rem;" onclick="deleteGoal(${idx})">Delete</button>
-            </div>
-        `).join('');
-    }
-
-    function deleteGoal(index) {
-        accountData.goals.splice(index, 1);
-        saveAccountToStorage();
-        renderGoals();
-    }
-
-    // MULTI-FILE PARSER
-    async function handleMultipleFiles(event) {
-        const files = Array.from(event.target.files);
-        let extractedText = "";
-
-        for (let file of files) {
-            if (file.type === "text/plain") {
-                const text = await file.text();
-                extractedText += `\n` + text;
-            } else if (file.type === "application/pdf") {
-                const arrayBuffer = await file.arrayBuffer();
-                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-                for (let i = 1; i <= pdf.numPages; i++) {
-                    const page = await pdf.getPage(i);
-                    const content = await page.getTextContent();
-                    extractedText += " " + content.items.map(item => item.str).join(" ");
-                }
-            } else {
-                extractedText += `\n[Uploaded non-plain text file: ${file.name}]`;
-            }
-        }
-
-        document.getElementById('raw-notes').value += extractedText;
-        alert(`Extracted text from ${files.length} file(s) into the raw notes box!`);
-    }
-
-    function generateAndSaveDeck() {
-        const text = document.getElementById('raw-notes').value;
-        const title = document.getElementById('deck-title-input').value || `Deck #${accountData.decks.length + 1}`;
-
-        if (!text) return alert("No text content provided to process!");
-
-        const sentences = text.split('.').filter(s => s.trim().length > 8);
-        const cards = sentences.map((s, idx) => ({
-            front: `Key Concept ${idx + 1}`,
-            back: s.trim()
-        }));
-
-        accountData.decks.push({ title, cards });
-        saveAccountToStorage();
-        renderDecks();
-        loadDeck(accountData.decks.length - 1);
-        alert(`Saved new deck "${title}" with ${cards.length} flashcards!`);
-    }
-
-    function renderDecks() {
-        const container = document.getElementById('decks-library-container');
-        if (accountData.decks.length === 0) {
-            container.innerHTML = `<p style="color: var(--text-muted); font-size: 0.85rem;">No saved decks found.</p>`;
-            return;
-        }
-
-        container.innerHTML = accountData.decks.map((d, idx) => `
-            <div class="item-list-card">
-                <div>
-                    <b>${d.title}</b> (${d.cards.length} cards)
-                </div>
-                <div>
-                    <button class="btn" style="padding: 4px 8px; font-size: 0.7rem;" onclick="loadDeck(${idx})">Study</button>
-                    <button class="btn btn-danger" style="padding: 4px 8px; font-size: 0.7rem;" onclick="deleteDeck(${idx})">✕</button>
-                </div>
-            </div>
-        `).join('');
-    }
-
-    function loadDeck(index) {
-        activeDeckIndex = index;
-        currentCardIndex = 0;
-        showingFront = true;
-        updateCardDisplay();
-        showTab('tab-tools');
-    }
-
-    function deleteDeck(index) {
-        accountData.decks.splice(index, 1);
-        if (activeDeckIndex === index) activeDeckIndex = -1;
-        saveAccountToStorage();
-        renderDecks();
-        updateCardDisplay();
-    }
-
-    function updateCardDisplay() {
-        const display = document.getElementById('card-display');
-        if (activeDeckIndex === -1 || !accountData.decks[activeDeckIndex]) {
-            display.innerText = "Select or create a deck to start reviewing!";
-            return;
-        }
-        const deck = accountData.decks[activeDeckIndex];
-        const card = deck.cards[currentCardIndex];
-        display.innerText = showingFront ? card.front : card.back;
-    }
-
-    function flipCard() {
-        if (activeDeckIndex === -1) return;
-        showingFront = !showingFront;
-        updateCardDisplay();
-    }
-
-    function rateCard(quality) {
-        if (activeDeckIndex === -1) return;
-        if (quality === 3) addXP(15);
-        showingFront = true;
-        const deck = accountData.decks[activeDeckIndex];
-        currentCardIndex = (currentCardIndex + 1) % deck.cards.length;
-        updateCardDisplay();
-    }
-
-    // JSON & AUTO QUIZ LOGIC
-    function importJsonQuiz() {
-        const jsonStr = document.getElementById('json-quiz-input').value;
-        try {
-            const parsed = JSON.parse(jsonStr);
-            if (Array.isArray(parsed) && parsed[0].question && parsed[0].options) {
-                activeQuiz = parsed;
-                currentQuizIndex = 0;
-                loadQuizQuestion();
-                alert("JSON Quiz imported successfully!");
-            } else {
-                throw new Error("Invalid structure");
-            }
-        } catch (e) {
-            alert("Invalid JSON format. Please ensure it is an array of question objects.");
-        }
-    }
-
-    function generateAutoQuizFromActiveDeck() {
-        if (activeDeckIndex === -1 || !accountData.decks[activeDeckIndex]) {
-            return alert("Please load an active deck first!");
-        }
-
-        const deck = accountData.decks[activeDeckIndex];
-        activeQuiz = deck.cards.map((c, i) => ({
-            question: `What relates to: ${c.back}?`,
-            options: [c.front, `Option B`, `Option C`, `Option D`],
-            correct: 0
-        }));
-
-        currentQuizIndex = 0;
-        loadQuizQuestion();
-        alert("Generated automated quiz from active deck!");
-    }
-
-    function loadQuizQuestion() {
-        if (activeQuiz.length === 0) return;
-        const q = activeQuiz[currentQuizIndex];
-        document.getElementById('quiz-question').innerText = `Q${currentQuizIndex + 1}: ${q.question}`;
+    <script>
+        /* ==========================================================================
+           MULTI-USER ACCOUNT STATE MANAGEMENT
+           ========================================================================== */
         
-        const optionsDiv = document.getElementById('quiz-options');
-        optionsDiv.innerHTML = '';
-        document.getElementById('quiz-feedback').style.display = 'none';
-        document.getElementById('next-quiz-btn').style.display = 'none';
+        // Master Storage Keys
+        const STORAGE_USERS_KEY = "studycraft_users_index_v1";
+        const STORAGE_ACTIVE_USER_KEY = "studycraft_active_user_v1";
 
-        q.options.forEach((opt, idx) => {
-            const btn = document.createElement('div');
-            btn.className = 'quiz-option';
-            btn.innerText = `${String.fromCharCode(65 + idx)}. ${opt}`;
-            btn.onclick = () => selectAnswer(idx, q.correct, btn);
-            optionsDiv.appendChild(btn);
+        // Global App State
+        let usersIndex = []; // Array of user profiles { id, name, title, avatar }
+        let activeUserId = "";
+        let userState = null; // Holds active account's isolated workspace data
+
+        // Default empty state template for new users
+        function createDefaultUserData(id, name, title = "Student", avatarSeed = "Alex") {
+            return {
+                profile: {
+                    id: id,
+                    name: name,
+                    title: title,
+                    avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(avatarSeed)}`,
+                    xp: 0,
+                    streak: 1,
+                    lastActiveDate: new Date().toISOString().split('T')[0]
+                },
+                goals: [
+                    { id: 'g1', subject: 'General Science & Biology', target: 90, progress: 45 }
+                ],
+                cards: [
+                    { id: 'c1', question: 'What is Mitochondria?', answer: 'The powerhouse of the cell producing ATP.', box: 1, lastReviewed: null },
+                    { id: 'c2', question: 'What is Photosynthesis?', answer: 'Process by which green plants convert sunlight into chemical energy.', box: 1, lastReviewed: null }
+                ],
+                quizzes: [],
+                activityHeatmap: Array(28).fill(0)
+            };
+        }
+
+        /* Initializer function for accounts */
+        function initAccountSystem() {
+            const savedUsers = localStorage.getItem(STORAGE_USERS_KEY);
+            if (savedUsers) {
+                try { usersIndex = JSON.parse(savedUsers); } catch(e) { usersIndex = []; }
+            }
+
+            if (!usersIndex || usersIndex.length === 0) {
+                // Initialize default demo account "Alex"
+                const defaultUser = createDefaultUserData("usr_alex", "Alex", "Pro Student", "Alex");
+                usersIndex = [{ id: defaultUser.profile.id, name: defaultUser.profile.name, title: defaultUser.profile.title, avatar: defaultUser.profile.avatar }];
+                localStorage.setItem(STORAGE_USERS_KEY, JSON.stringify(usersIndex));
+                localStorage.setItem(`studycraft_data_${defaultUser.profile.id}`, JSON.stringify(defaultUser));
+                activeUserId = defaultUser.profile.id;
+            } else {
+                activeUserId = localStorage.getItem(STORAGE_ACTIVE_USER_KEY) || usersIndex[0].id;
+            }
+
+            loadActiveUserData();
+        }
+
+        function loadActiveUserData() {
+            const raw = localStorage.getItem(`studycraft_data_${activeUserId}`);
+            if (raw) {
+                try { userState = JSON.parse(raw); } catch(e) { userState = null; }
+            }
+            if (!userState) {
+                userState = createDefaultUserData(activeUserId, "User", "Student");
+            }
+            localStorage.setItem(STORAGE_ACTIVE_USER_KEY, activeUserId);
+            renderUserProfileUI();
+            renderGoalsUI();
+            renderHeatmapUI();
+            updateCardDisplay();
+        }
+
+        function saveActiveUserData() {
+            if (!userState || !activeUserId) return;
+            localStorage.setItem(`studycraft_data_${activeUserId}`, JSON.stringify(userState));
+            // Sync index avatar/title if changed
+            const idx = usersIndex.findIndex(u => u.id === activeUserId);
+            if (idx !== -1) {
+                usersIndex[idx].name = userState.profile.name;
+                usersIndex[idx].title = userState.profile.title;
+                usersIndex[idx].avatar = userState.profile.avatar;
+                localStorage.setItem(STORAGE_USERS_KEY, JSON.stringify(usersIndex));
+            }
+            renderUserProfileUI();
+        }
+
+        function switchUserAccount(newUserId) {
+            activeUserId = newUserId;
+            loadActiveUserData();
+            document.getElementById('accountDropdown').classList.add('hidden');
+        }
+
+        function renderUserProfileUI() {
+            if (!userState) return;
+            const p = userState.profile;
+
+            // Update Header Stats & Profile
+            document.getElementById('activeAvatar').src = p.avatar;
+            document.getElementById('activeUsername').innerText = p.name;
+            document.getElementById('activeUserTitle').innerText = p.title;
+
+            document.getElementById('sidebarAvatar').src = p.avatar;
+            document.getElementById('sidebarUsername').innerText = p.name;
+            document.getElementById('sidebarXPText').innerText = `${p.xp} XP Earned`;
+
+            document.getElementById('headerStreak').innerText = `${p.streak} Days`;
+            document.getElementById('headerXP').innerText = `${p.xp} XP`;
+            document.getElementById('dashAccountName').innerText = p.name;
+
+            // Level Calculation
+            let level = "Novice";
+            if (p.xp > 500) level = "Master Scholar";
+            else if (p.xp > 200) level = "Intermediate";
+            else if (p.xp > 50) level = "Apprentice";
+            document.getElementById('headerLevel').innerText = level;
+
+            // Render Account Switcher Menu List
+            const listEl = document.getElementById('userProfilesList');
+            listEl.innerHTML = usersIndex.map(u => `
+                <div onclick="switchUserAccount('${u.id}')" class="flex items-center justify-between p-2 rounded-xl cursor-pointer hover:bg-slate-800 transition ${u.id === activeUserId ? 'bg-brand-600/20 border border-brand-500/40' : ''}">
+                    <div class="flex items-center gap-2">
+                        <img src="${u.avatar}" class="w-6 h-6 rounded-full bg-slate-700">
+                        <div>
+                            <p class="text-xs font-semibold text-white">${u.name}</p>
+                            <p class="text-[10px] text-slate-400">${u.title}</p>
+                        </div>
+                    </div>
+                    ${u.id === activeUserId ? '<i class="fa-solid fa-check text-xs text-brand-500"></i>' : ''}
+                </div>
+            `).join('');
+        }
+
+        /* ==========================================================================
+           GOALS & HEATMAP ANALYTICS
+           ========================================================================== */
+        function renderGoalsUI() {
+            const goalsList = document.getElementById('accountGoalsList');
+            if (!userState.goals || userState.goals.length === 0) {
+                goalsList.innerHTML = `<p class="text-xs text-slate-500 italic">No study goals set yet. Click "+ New Goal" above.</p>`;
+                return;
+            }
+
+            goalsList.innerHTML = userState.goals.map((g, i) => `
+                <div class="glass-card p-3 rounded-xl border border-slate-800 flex flex-col gap-1.5">
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="font-semibold text-slate-200">${g.subject}</span>
+                        <span class="text-brand-400 font-bold">${g.progress}% / ${g.target}%</span>
+                    </div>
+                    <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+                        <div class="bg-gradient-to-r from-brand-500 to-accent-cyan h-2 rounded-full transition-all duration-500" style="width: ${Math.min(100, (g.progress / g.target) * 100)}%"></div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderHeatmapUI() {
+            const container = document.getElementById('activityHeatmap');
+            if (!userState.activityHeatmap) userState.activityHeatmap = Array(28).fill(0);
+            
+            container.innerHTML = userState.activityHeatmap.map(val => {
+                let opacity = "bg-slate-800/50";
+                if (val > 10) opacity = "bg-brand-500";
+                else if (val > 5) opacity = "bg-brand-600/70";
+                else if (val > 0) opacity = "bg-brand-700/40";
+                return `<div class="h-6 rounded-md ${opacity} border border-slate-800/80" title="${val} activities"></div>`;
+            }).join('');
+
+            // Calculate Mastery %
+            const totalCards = userState.cards.length;
+            const masterCards = userState.cards.filter(c => c.box >= 4).length;
+            const mastery = totalCards > 0 ? Math.round((masterCards / totalCards) * 100) : 0;
+            document.getElementById('masteryPercent').innerText = `${mastery}%`;
+        }
+
+        function recordActivity(xpGain = 10) {
+            userState.profile.xp += xpGain;
+            if (!userState.activityHeatmap) userState.activityHeatmap = Array(28).fill(0);
+            userState.activityHeatmap[userState.activityHeatmap.length - 1] += 1;
+            saveActiveUserData();
+            renderHeatmapUI();
+        }
+
+        /* ==========================================================================
+           TAB NAVIGATION & ACCESSIBILITY
+           ========================================================================== */
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const target = btn.getAttribute('data-tab');
+                if (!target) return;
+
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+                document.getElementById(target).classList.remove('hidden');
+
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active-tab', 'text-white', 'bg-slate-800', 'bg-brand-600'));
+                btn.classList.add('active-tab');
+            });
         });
-    }
 
-    function selectAnswer(selected, correct, element) {
-        const options = document.querySelectorAll('.quiz-option');
-        options.forEach(opt => opt.onclick = null);
+        // Account Dropdown Toggle
+        document.getElementById('accountMenuBtn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            document.getElementById('accountDropdown').classList.toggle('hidden');
+        });
+        document.addEventListener('click', () => {
+            document.getElementById('accountDropdown').classList.add('hidden');
+        });
 
-        const feedback = document.getElementById('quiz-feedback');
-        feedback.style.display = 'block';
+        // Account Modal
+        document.getElementById('openNewAccountModal').addEventListener('click', () => {
+            document.getElementById('newAccountModal').classList.remove('hidden');
+        });
+        document.getElementById('closeAccountModalBtn').addEventListener('click', () => {
+            document.getElementById('newAccountModal').classList.add('hidden');
+        });
+        document.getElementById('createAccountForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const name = document.getElementById('newUsername').value.trim();
+            const role = document.getElementById('newUserRole').value.trim() || "Student";
+            const seed = document.getElementById('newAvatarSeed').value.trim() || name;
 
-        if (selected === correct) {
-            element.classList.add('correct');
-            feedback.innerText = "✨ Correct! +20 XP";
-            feedback.style.color = "var(--accent-green)";
-            addXP(20);
-        } else {
-            element.classList.add('wrong');
-            options[correct].classList.add('correct');
-            feedback.innerText = "❌ Incorrect!";
-            feedback.style.color = "var(--accent-red)";
+            if (!name) return;
+            const id = "usr_" + Date.now();
+            const newUserData = createDefaultUserData(id, name, role, seed);
+
+            usersIndex.push({ id: id, name: name, title: role, avatar: newUserData.profile.avatar });
+            localStorage.setItem(STORAGE_USERS_KEY, JSON.stringify(usersIndex));
+            localStorage.setItem(`studycraft_data_${id}`, JSON.stringify(newUserData));
+
+            switchUserAccount(id);
+            document.getElementById('newAccountModal').classList.add('hidden');
+        });
+
+        // Goal Modal
+        document.getElementById('addGoalBtn').addEventListener('click', () => {
+            document.getElementById('newGoalModal').classList.remove('hidden');
+        });
+        document.getElementById('closeGoalModalBtn').addEventListener('click', () => {
+            document.getElementById('newGoalModal').classList.add('hidden');
+        });
+        document.getElementById('createGoalForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const subj = document.getElementById('goalSubject').value.trim();
+            const target = parseInt(document.getElementById('goalTargetScore').value) || 90;
+            if (!subj) return;
+
+            userState.goals.push({ id: 'g_' + Date.now(), subject: subj, target: target, progress: 0 });
+            saveActiveUserData();
+            renderGoalsUI();
+            document.getElementById('newGoalModal').classList.add('hidden');
+        });
+
+        // Dyslexic Font Toggle
+        document.getElementById('dyslexicBtn').addEventListener('click', () => {
+            document.body.classList.toggle('font-dyslexic');
+        });
+
+        /* ==========================================================================
+           EXPORT / IMPORT ACCOUNT BACKUP
+           ========================================================================== */
+        document.getElementById('exportAccountBtn').addEventListener('click', () => {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(userState));
+            const dlAnchor = document.createElement('a');
+            dlAnchor.setAttribute("href", dataStr);
+            dlAnchor.setAttribute("download", `studycraft_backup_${userState.profile.name}.json`);
+            document.body.appendChild(dlAnchor);
+            dlAnchor.click();
+            dlAnchor.remove();
+        });
+
+        document.getElementById('importAccountInput').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                try {
+                    const imported = JSON.parse(evt.target.result);
+                    if (imported && imported.profile && imported.profile.id) {
+                        userState = imported;
+                        saveActiveUserData();
+                        alert("Account profile imported successfully!");
+                    }
+                } catch(err) {
+                    alert("Invalid JSON backup file.");
+                }
+            };
+            reader.readAsText(file);
+        });
+
+        /* ==========================================================================
+           MATERIAL PROCESSING & TEXT EXTRACTION
+           ========================================================================== */
+        document.getElementById('processTextBtn').addEventListener('click', () => {
+            const text = document.getElementById('rawNotesInput').value.trim();
+            if (!text) {
+                alert("Please paste text notes or upload a file first.");
+                return;
+            }
+            extractConceptsFromText(text);
+        });
+
+        function extractConceptsFromText(text) {
+            // Smart simple sentence/concept extraction logic
+            const sentences = text.split(/[.!?]\s+/).filter(s => s.length > 15);
+            const termsContainer = document.getElementById('extractedTermsContainer');
+            termsContainer.innerHTML = '';
+
+            const newCards = [];
+            sentences.forEach((sentence, idx) => {
+                const words = sentence.split(' ');
+                if (words.length > 5) {
+                    const keyConcept = words.slice(0, 3).join(' ');
+                    newCards.push({
+                        id: 'card_' + Date.now() + '_' + idx,
+                        question: `What is meant by: "${keyConcept}..."?`,
+                        answer: sentence,
+                        box: 1
+                    });
+
+                    const tag = document.createElement('span');
+                    tag.className = "px-2.5 py-1 rounded-lg bg-brand-500/10 border border-brand-500/20 text-brand-300 font-medium";
+                    tag.innerText = keyConcept;
+                    termsContainer.appendChild(tag);
+                }
+            });
+
+            if (newCards.length > 0) {
+                userState.cards.push(...newCards);
+                saveActiveUserData();
+                recordActivity(25);
+                alert(`Extracted ${newCards.length} new flashcards from your material!`);
+                updateCardDisplay();
+            }
         }
 
-        document.getElementById('next-quiz-btn').style.display = 'block';
-    }
+        /* ==========================================================================
+           LEITNER FLASHCARD SYSTEM
+           ========================================================================== */
+        let currentCardIndex = 0;
+        let isFlipped = false;
 
-    function nextQuestion() {
-        currentQuizIndex = (currentQuizIndex + 1) % activeQuiz.length;
-        loadQuizQuestion();
-    }
+        function updateCardDisplay() {
+            if (!userState.cards || userState.cards.length === 0) {
+                document.getElementById('cardContent').innerText = "No cards available. Process notes to create cards.";
+                return;
+            }
+            if (currentCardIndex >= userState.cards.length) currentCardIndex = 0;
 
-    function addXP(amount) {
-        accountData.xp += amount;
-        saveAccountToStorage();
-    }
+            const card = userState.cards[currentCardIndex];
+            document.getElementById('cardBoxTag').innerText = `Box ${card.box}`;
+            document.getElementById('cardContent').innerText = isFlipped ? card.answer : card.question;
+            document.getElementById('voiceCardText').innerText = `Prompt: ${card.question}`;
+        }
 
-    function toggleDyslexia() {
-        document.body.classList.toggle('dyslexic');
-    }
-</script>
+        document.getElementById('flashcardBox').addEventListener('click', () => {
+            isFlipped = !isFlipped;
+            updateCardDisplay();
+        });
+
+        document.querySelectorAll('.rate-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (!userState.cards || userState.cards.length === 0) return;
+                const rating = parseInt(btn.getAttribute('data-rate'));
+                const card = userState.cards[currentCardIndex];
+
+                if (rating === 1) card.box = 1;
+                else if (rating === 3) card.box = Math.min(5, card.box + 1);
+                else if (rating === 4) card.box = Math.min(5, card.box + 2);
+
+                recordActivity(15);
+                isFlipped = false;
+                currentCardIndex = (currentCardIndex + 1) % userState.cards.length;
+                updateCardDisplay();
+            });
+        });
+
+        /* ==========================================================================
+           SMART QUIZ ENGINE WITH CONTEXTUAL DISTRACTORS
+           ========================================================================== */
+        let currentQuizIndex = 0;
+        let quizScore = 0;
+        let activeQuizQuestions = [];
+
+        document.getElementById('generateQuizFromCards').addEventListener('click', generateQuizFromState);
+
+        function generateQuizFromState() {
+            if (!userState.cards || userState.cards.length < 2) {
+                alert("Please add or process at least 2 cards to build a SMART quiz!");
+                return;
+            }
+
+            activeQuizQuestions = userState.cards.map((card, i) => {
+                // Pick real distractors from other cards in the user's workspace
+                const otherCards = userState.cards.filter((_, idx) => idx !== i);
+                const distractors = otherCards.map(c => c.answer).sort(() => 0.5 - Math.random()).slice(0, 3);
+
+                const options = [card.answer, ...distractors].sort(() => 0.5 - Math.random());
+                return {
+                    question: card.question,
+                    correctAnswer: card.answer,
+                    options: options
+                };
+            });
+
+            currentQuizIndex = 0;
+            quizScore = 0;
+            renderQuizQuestion();
+        }
+
+        function renderQuizQuestion() {
+            if (!activeQuizQuestions.length) return;
+            const q = activeQuizQuestions[currentQuizIndex];
+            
+            document.getElementById('quizProgress').innerText = `Question ${currentQuizIndex + 1} of ${activeQuizQuestions.length}`;
+            document.getElementById('quizScore').innerText = `Score: ${quizScore} XP`;
+            document.getElementById('quizQuestionText').innerText = q.question;
+
+            const grid = document.getElementById('quizOptionsGrid');
+            grid.innerHTML = q.options.map((opt, idx) => `
+                <button onclick="checkQuizOption('${opt.replace(/'/g, "\\'")}', this)" class="p-3 text-left glass-card hover:bg-slate-800 rounded-xl border border-slate-700 text-xs text-slate-200 font-medium transition">
+                    ${opt}
+                </button>
+            `).join('');
+
+            document.getElementById('quizExplanation').classList.add('hidden');
+            document.getElementById('nextQuizBtn').classList.add('hidden');
+        }
+
+        function checkQuizOption(selected, btn) {
+            const q = activeQuizQuestions[currentQuizIndex];
+            const isCorrect = selected === q.correctAnswer;
+            
+            if (isCorrect) {
+                btn.classList.add('bg-emerald-500/20', 'border-emerald-500', 'text-emerald-300');
+                quizScore += 20;
+                recordActivity(20);
+            } else {
+                btn.classList.add('bg-rose-500/20', 'border-rose-500', 'text-rose-300');
+            }
+
+            document.getElementById('quizScore').innerText = `Score: ${quizScore} XP`;
+            document.getElementById('nextQuizBtn').classList.remove('hidden');
+        }
+
+        document.getElementById('nextQuizBtn').addEventListener('click', () => {
+            currentQuizIndex++;
+            if (currentQuizIndex < activeQuizQuestions.length) {
+                renderQuizQuestion();
+            } else {
+                alert(`Quiz complete! You scored ${quizScore} XP!`);
+            }
+        });
+
+        /* ==========================================================================
+           CLOZE DELETION ACTIVE RECALL EDITOR
+           ========================================================================== */
+        document.getElementById('renderClozeBtn').addEventListener('click', () => {
+            const text = document.getElementById('clozeInput').value;
+            if (!text) return;
+
+            // Convert [term] into interactive hidden blanks
+            const renderedHtml = text.replace(/\[(.*?)\]/g, (match, p1) => {
+                return `<span class="cloze-blank" onclick="this.classList.toggle('revealed')">${p1}</span>`;
+            });
+
+            document.getElementById('clozeDisplay').innerHTML = renderedHtml;
+        });
+
+        /* ==========================================================================
+           WEB AUDIO SYNTHESIZER & POMODORO
+           ========================================================================== */
+        let audioCtx = null;
+        let whiteNoiseNode = null;
+
+        document.getElementById('toggleWhiteNoise').addEventListener('click', function() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            
+            if (whiteNoiseNode) {
+                whiteNoiseNode.stop();
+                whiteNoiseNode = null;
+                this.innerText = "Play";
+                this.classList.remove('text-accent-emerald');
+            } else {
+                const bufferSize = audioCtx.sampleRate * 2;
+                const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                const output = noiseBuffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    output[i] = Math.random() * 2 - 1;
+                }
+                whiteNoiseNode = audioCtx.createBufferSource();
+                whiteNoiseNode.buffer = noiseBuffer;
+                whiteNoiseNode.loop = true;
+                
+                const gain = audioCtx.createGain();
+                gain.gain.value = 0.05;
+                whiteNoiseNode.connect(gain);
+                gain.connect(audioCtx.destination);
+                
+                whiteNoiseNode.start();
+                this.innerText = "Stop";
+                this.classList.add('text-accent-emerald');
+            }
+        });
+
+        // Timer Logic
+        let timerSeconds = 25 * 60;
+        let timerInterval = null;
+
+        document.getElementById('startTimerBtn').addEventListener('click', () => {
+            if (timerInterval) return;
+            timerInterval = setInterval(() => {
+                if (timerSeconds > 0) {
+                    timerSeconds--;
+                    const m = Math.floor(timerSeconds / 60).toString().padStart(2, '0');
+                    const s = (timerSeconds % 60).toString().padStart(2, '0');
+                    document.getElementById('timerDisplay').innerText = `${m}:${s}`;
+                } else {
+                    clearInterval(timerInterval);
+                    timerInterval = null;
+                    alert("Focus session complete!");
+                }
+            }, 1000);
+        });
+
+        document.getElementById('pauseTimerBtn').addEventListener('click', () => {
+            clearInterval(timerInterval);
+            timerInterval = null;
+        });
+
+        document.getElementById('resetTimerBtn').addEventListener('click', () => {
+            clearInterval(timerInterval);
+            timerInterval = null;
+            timerSeconds = 25 * 60;
+            document.getElementById('timerDisplay').innerText = "25:00";
+        });
+
+        /* ==========================================================================
+           COMMUNITY HUB PRESETS
+           ========================================================================== */
+        window.importPresetDeck = function(type) {
+            if (type === 'bio') {
+                userState.cards.push(
+                    { id: 'bio_1', question: 'What is the role of Ribosomes?', answer: 'Protein synthesis in cells.', box: 1 },
+                    { id: 'bio_2', question: 'Define Osmosis.', answer: 'Diffusion of water across a semi-permeable membrane.', box: 1 }
+                );
+            } else if (type === 'cs') {
+                userState.cards.push(
+                    { id: 'cs_1', question: 'Time complexity of Binary Search?', answer: 'O(log n)', box: 1 },
+                    { id: 'cs_2', question: 'What is a Hash Table?', answer: 'Data structure that maps keys to values for O(1) lookup.', box: 1 }
+                );
+            }
+            saveActiveUserData();
+            recordActivity(30);
+            alert("Community deck imported into your profile!");
+            updateCardDisplay();
+        };
+
+        /* Initialization on Load */
+        window.onload = function() {
+            initAccountSystem();
+        };
+    </script>
 </body>
 </html>
